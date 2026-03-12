@@ -23,17 +23,21 @@ type Student = {
   name: string;
 };
 
+type Trip = {
+  tripNumber: number;
+  time: string;
+  students: Student[];
+};
+
 type Bus = {
   id: string;
   name: string;
   route: string;
   capacity: number;
-  trips: number;
   status: string;
-  departureTimes: string[];
   routeDetails: RouteDetails;
   driver: DriverDetails;
-  students: Student[];
+  trips: Trip[];
 };
 
 type TabKey = 'general' | 'route' | 'driver';

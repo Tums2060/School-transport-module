@@ -22,17 +22,21 @@ type Student = {
   name: string;
 };
 
+type Trip = {
+  tripNumber: number;
+  time: string;
+  students: Student[];
+};
+
 type Bus = {
   id: string;
   name: string;
   route: string;
   capacity: number;
-  trips: number;
   status: string;
-  departureTimes: string[];
   routeDetails: RouteDetails;
   driver: DriverDetails;
-  students: Student[];
+  trips: Trip[];
 };
 
 type BusFormData = {
@@ -40,7 +44,6 @@ type BusFormData = {
   name: string;
   route: string;
   capacity: string;
-  trips: string;
   status: string;
   departureTimes: string[];
   routeDetails: RouteDetails;
@@ -57,9 +60,7 @@ const initialBuses: Bus[] = [
     name: 'Scania - Kiserian',
     route: 'Kiserian - Rongai - Upper Hill Campus',
     capacity: 45,
-    trips: 2,
     status: 'Active',
-    departureTimes: ['06:30', '15:45'],
     routeDetails: {
       area: 'Kiserian',
       pickupPoints: 'Kiserian Stage, Corner Baridi, Rongai SGR',
@@ -71,16 +72,17 @@ const initialBuses: Bus[] = [
       name: 'Samuel Njoroge',
       phone: '0712 345 678',
     },
-    students: [],
+    trips: [
+      { tripNumber: 1, time: '06:30', students: [] },
+      { tripNumber: 2, time: '15:45', students: [] },
+    ],
   },
   {
     id: 'BS002',
     name: 'Isuzu - Thika Road',
     route: 'Thika Road - Muthaiga - Main Campus',
     capacity: 33,
-    trips: 1,
     status: 'Active',
-    departureTimes: ['07:00', '16:00'],
     routeDetails: {
       area: 'Thika Road Corridor',
       pickupPoints: 'Garden City, Roasters, Muthaiga Roundabout',
@@ -92,16 +94,17 @@ const initialBuses: Bus[] = [
       name: 'Mercy Wanjiku',
       phone: '0722 456 789',
     },
-    students: [],
+    trips: [
+      { tripNumber: 1, time: '07:00', students: [] },
+      { tripNumber: 2, time: '16:00', students: [] },
+    ],
   },
   {
     id: 'BS003',
     name: 'Nissan - Syokimau',
     route: 'Syokimau - Mombasa Road - Junior School',
     capacity: 25,
-    trips: 2,
     status: 'Maintenance',
-    departureTimes: ['06:45', '12:00', '16:15'],
     routeDetails: {
       area: 'Syokimau',
       pickupPoints: 'Syokimau Station, Gateway Mall, Mlolongo',
@@ -113,7 +116,11 @@ const initialBuses: Bus[] = [
       name: 'David Mutua',
       phone: '0733 567 890',
     },
-    students: [],
+    trips: [
+      { tripNumber: 1, time: '06:45', students: [] },
+      { tripNumber: 2, time: '12:00', students: [] },
+      { tripNumber: 3, time: '16:15', students: [] },
+    ],
   },
 ];
 
@@ -179,7 +186,7 @@ function buildRouteSummary(routeDetails: RouteDetails) {
   return parts.join(' - ');
 }
 
-function normalizeBus(rawBus: Partial<Bus> & { time?: string }) {
+function normalizeBus(rawBus: Partial<Bus> & { departureTimes?: string[]; students?: Student[]; time?: string }) {
   const routeDetails: RouteDetails = {
     area: rawBus.routeDetails?.area?.trim() || rawBus.route?.split(' - ')[0] || '',
     pickupPoints: rawBus.routeDetails?.pickupPoints?.trim() || '',
@@ -188,38 +195,57 @@ function normalizeBus(rawBus: Partial<Bus> & { time?: string }) {
     notes: rawBus.routeDetails?.notes?.trim() || '',
   };
 
-  const departureTimes = Array.from(
-    new Set(
-      (Array.isArray(rawBus.departureTimes) ? rawBus.departureTimes : rawBus.time ? [rawBus.time] : [])
-        .map((time) => parseTimeValue(String(time)))
-        .filter(Boolean)
-    )
-  );
+  // Collect all departure times from multiple sources
+  let departureTimes: string[] = [];
+  
+  if (Array.isArray(rawBus.departureTimes)) {
+    departureTimes = rawBus.departureTimes.map((time) => parseTimeValue(String(time))).filter(Boolean);
+  } else if (rawBus.time) {
+    departureTimes = [parseTimeValue(String(rawBus.time))].filter(Boolean);
+  }
+  
+  // Remove duplicates and sort by time
+  departureTimes = Array.from(new Set(departureTimes)).sort();
 
-  const students = Array.isArray(rawBus.students)
-    ? rawBus.students.filter(
-        (student): student is Student =>
-          typeof student === 'object' &&
-          student !== null &&
-          typeof student.admissionNumber === 'string' &&
-          typeof student.name === 'string'
-      )
-    : [];
+  // Convert trips from old format or new format
+  let trips: Trip[] = [];
+  
+  if (Array.isArray(rawBus.trips) && rawBus.trips.length > 0 && typeof rawBus.trips[0] === 'object') {
+    // New format - trips are already Trip objects
+    trips = rawBus.trips.map((trip: any) => ({
+      tripNumber: trip.tripNumber || 0,
+      time: trip.time || '',
+      students: Array.isArray(trip.students)
+        ? trip.students.filter(
+            (student: any): student is Student =>
+              typeof student === 'object' &&
+              student !== null &&
+              typeof student.admissionNumber === 'string' &&
+              typeof student.name === 'string'
+          )
+        : [],
+    }));
+  } else if (departureTimes.length > 0) {
+    // Old format or new with departure times - convert to trips
+    trips = departureTimes.map((time, index) => ({
+      tripNumber: index + 1,
+      time,
+      students: [],
+    }));
+  }
 
   return {
     id: rawBus.id || 'BS000',
     name: rawBus.name?.trim() || 'Unnamed Bus',
     route: rawBus.route?.trim() || buildRouteSummary(routeDetails) || 'Route pending',
     capacity: Number(rawBus.capacity) || 0,
-    trips: Number(rawBus.trips) || 0,
     status: rawBus.status?.trim() || 'Active',
-    departureTimes,
     routeDetails,
     driver: {
       name: rawBus.driver?.name?.trim() || '',
       phone: rawBus.driver?.phone?.trim() || '',
     },
-    students,
+    trips,
   } satisfies Bus;
 }
 
@@ -229,9 +255,8 @@ function createFormData(bus: Bus): BusFormData {
     name: bus.name,
     route: bus.route,
     capacity: String(bus.capacity),
-    trips: String(bus.trips),
     status: bus.status,
-    departureTimes: bus.departureTimes.length > 0 ? [...bus.departureTimes] : [''],
+    departureTimes: bus.trips.length > 0 ? bus.trips.map((trip) => trip.time) : [''],
     routeDetails: { ...bus.routeDetails },
     driver: { ...bus.driver },
   };
@@ -251,10 +276,6 @@ function validateBusForm(formData: BusFormData) {
 
   if ((Number(formData.capacity) || 0) <= 0) {
     nextErrors.push('Capacity must be greater than zero.');
-  }
-
-  if ((Number(formData.trips) || 0) <= 0) {
-    nextErrors.push('Daily trips must be greater than zero.');
   }
 
   if (normalizedTimes.length === 0) {
@@ -289,6 +310,7 @@ export default function BusesListPage() {
   const [editFormData, setEditFormData] = useState<BusFormData | null>(null);
   const [showLearnersModal, setShowLearnersModal] = useState(false);
   const [selectedBusId, setSelectedBusId] = useState<string | null>(null);
+  const [selectedTripNumber, setSelectedTripNumber] = useState<number | null>(null);
   const [newStudentAdmission, setNewStudentAdmission] = useState('');
   const [newStudentName, setNewStudentName] = useState('');
   const [deletingBusId, setDeletingBusId] = useState<string | null>(null);
@@ -331,15 +353,13 @@ export default function BusesListPage() {
 
       autoTable(document, {
         startY: 40,
-        head: [['Bus No.', 'Bus Name', 'Route', 'Driver', 'Departure Times', 'Capacity', 'Trips', 'Status']],
+        head: [['Bus No.', 'Bus Name', 'Route', 'Driver', 'Capacity', 'Status']],
         body: buses.map((bus) => [
           bus.id,
           bus.name,
           bus.route,
           bus.driver.name || 'Not assigned',
-          bus.departureTimes.length > 0 ? bus.departureTimes.map(formatTimeLabel).join(', ') : 'Not set',
           String(bus.capacity),
-          String(bus.trips),
           bus.status,
         ]),
         headStyles: {
@@ -460,16 +480,23 @@ export default function BusesListPage() {
       return;
     }
 
-    const departureTimes = Array.from(new Set(editFormData.departureTimes.map(parseTimeValue).filter(Boolean)));
+    // Parse and sort departure times
+    const departureTimes = Array.from(new Set(editFormData.departureTimes.map(parseTimeValue).filter(Boolean))).sort();
+    
+    // Create trips from departure times with auto-numbering
+    const trips: Trip[] = departureTimes.map((time, index) => ({
+      tripNumber: index + 1,
+      time,
+      students: [],
+    }));
+
     const originalBus = buses.find((b) => b.id === editingBusId);
     const updatedBus: Bus = {
       id: editFormData.id,
       name: editFormData.name.trim(),
       route: editFormData.route.trim() || buildRouteSummary(editFormData.routeDetails),
       capacity: Number(editFormData.capacity) || 0,
-      trips: Number(editFormData.trips) || 0,
       status: editFormData.status,
-      departureTimes,
       routeDetails: {
         area: editFormData.routeDetails.area.trim(),
         pickupPoints: editFormData.routeDetails.pickupPoints.trim(),
@@ -481,7 +508,12 @@ export default function BusesListPage() {
         name: editFormData.driver.name.trim(),
         phone: editFormData.driver.phone.trim(),
       },
-      students: originalBus?.students || [],
+      trips: originalBus?.trips && originalBus.trips.length === trips.length 
+        ? originalBus.trips.map((trip, idx) => ({
+            ...trip,
+            time: trips[idx]?.time || trip.time,
+          }))
+        : trips,
     };
 
     const updatedBuses = buses.map((bus) => (bus.id === editingBusId ? updatedBus : bus));
@@ -498,37 +530,38 @@ export default function BusesListPage() {
   const closeLearnersModal = () => {
     setShowLearnersModal(false);
     setSelectedBusId(null);
+    setSelectedTripNumber(null);
     setNewStudentAdmission('');
     setNewStudentName('');
   };
 
   const addStudent = () => {
-    if (!selectedBusId || !newStudentAdmission.trim() || !newStudentName.trim()) {
+    if (!selectedBusId || selectedTripNumber === null || !newStudentAdmission.trim() || !newStudentName.trim()) {
       return;
     }
 
-    const bus = buses.find((b) => b.id === selectedBusId);
-    if (!bus) return;
-
-    if (bus.students.length >= bus.capacity) {
-      alert(`Bus capacity (${bus.capacity}) reached. Cannot add more students.`);
-      return;
-    }
-
-    const updatedBuses = buses.map((b) =>
-      b.id === selectedBusId
-        ? {
-            ...b,
-            students: [
-              ...b.students,
-              {
-                admissionNumber: newStudentAdmission.trim(),
-                name: newStudentName.trim(),
-              },
-            ],
-          }
-        : b
-    );
+    const updatedBuses = buses.map((b) => {
+      if (b.id === selectedBusId) {
+        return {
+          ...b,
+          trips: b.trips.map((trip) =>
+            trip.tripNumber === selectedTripNumber
+              ? {
+                  ...trip,
+                  students: [
+                    ...trip.students,
+                    {
+                      admissionNumber: newStudentAdmission.trim(),
+                      name: newStudentName.trim(),
+                    },
+                  ],
+                }
+              : trip
+          ),
+        };
+      }
+      return b;
+    });
 
     setBuses(updatedBuses);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedBuses));
@@ -537,24 +570,32 @@ export default function BusesListPage() {
   };
 
   const removeStudent = (admissionNumber: string) => {
-    if (!selectedBusId) return;
+    if (!selectedBusId || selectedTripNumber === null) return;
 
-    const updatedBuses = buses.map((b) =>
-      b.id === selectedBusId
-        ? {
-            ...b,
-            students: b.students.filter((s) => s.admissionNumber !== admissionNumber),
-          }
-        : b
-    );
+    const updatedBuses = buses.map((b) => {
+      if (b.id === selectedBusId) {
+        return {
+          ...b,
+          trips: b.trips.map((trip) =>
+            trip.tripNumber === selectedTripNumber
+              ? {
+                  ...trip,
+                  students: trip.students.filter((s) => s.admissionNumber !== admissionNumber),
+                }
+              : trip
+          ),
+        };
+      }
+      return b;
+    });
 
     setBuses(updatedBuses);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedBuses));
   };
 
-  const downloadLearnersPDF = async (bus: Bus) => {
-    if (bus.students.length === 0) {
-      alert('No students on this bus. Cannot generate report.');
+  const downloadLearnersPDF = async (bus: Bus, trip: Trip) => {
+    if (trip.students.length === 0) {
+      alert('No students in this trip. Cannot generate report.');
       return;
     }
 
@@ -567,18 +608,19 @@ export default function BusesListPage() {
       document.rect(0, 0, 210, 24, 'F');
       document.setFontSize(16);
       document.setTextColor(255, 255, 255);
-      document.text(`${bus.name} - Student Roster`, 14, 15);
+      document.text(`${bus.name} - Trip ${trip.tripNumber} Student Roster`, 14, 15);
 
       document.setFontSize(10);
       document.setTextColor(55, 65, 81);
       document.text(`Bus No: ${bus.id}`, 14, 32);
       document.text(`Route: ${bus.route}`, 14, 38);
-      document.text(`Generated on ${new Date().toLocaleString()}`, 14, 44);
+      document.text(`Trip ${trip.tripNumber} - ${formatTimeLabel(trip.time)}`, 14, 44);
+      document.text(`Generated on ${new Date().toLocaleString()}`, 14, 50);
 
       autoTable(document, {
-        startY: 50,
+        startY: 56,
         head: [['Admission Number', 'Student Name']],
-        body: bus.students.map((student) => [student.admissionNumber, student.name]),
+        body: trip.students.map((student) => [student.admissionNumber, student.name]),
         headStyles: {
           fillColor: [13, 148, 136],
           textColor: [255, 255, 255],
@@ -598,7 +640,7 @@ export default function BusesListPage() {
         },
       });
 
-      document.save(`${bus.id}-students-roster.pdf`);
+      document.save(`${bus.id}-trip${trip.tripNumber}-students.pdf`);
     } catch (error) {
       console.error('Error generating PDF:', error);
       alert('Failed to generate PDF. Please try again.');
@@ -626,7 +668,7 @@ export default function BusesListPage() {
     <div className="min-h-screen bg-gray-50 font-sans text-sm text-gray-800">
       <div className="bg-[#1F1F1F] text-white flex items-center justify-between px-4 py-2">
         <div className="flex items-center space-x-4">
-          <span className="font-semibold text-lg">Dynamics 365 Business Central</span>
+          {/* <span className="font-semibold text-lg">Dynamics 365 Business Central</span> */}
         </div>
         <div className="flex items-center space-x-4">
           <button type="button" className="hover:text-gray-300">
@@ -685,9 +727,8 @@ export default function BusesListPage() {
                 <th className="font-normal py-2 px-4">Bus Name</th>
                 <th className="font-normal py-2 px-4">Route</th>
                 <th className="font-normal py-2 px-4">Driver</th>
-                <th className="font-normal py-2 px-4">Departure Times</th>
+                <th className="font-normal py-2 px-4">Trips</th>
                 <th className="font-normal py-2 px-4 text-right">Capacity</th>
-                <th className="font-normal py-2 px-4 text-right">Trips</th>
                 <th className="font-normal py-2 px-4">Status</th>
                 <th className="font-normal py-2 px-4 text-right">Edit</th>
               </tr>
@@ -707,11 +748,16 @@ export default function BusesListPage() {
                     )}
                   </td>
                   <td className="py-2 px-4">{bus.driver.name || 'Not assigned'}</td>
-                  <td className="py-2 px-4 text-gray-600">
-                    {bus.departureTimes.length > 0 ? bus.departureTimes.map(formatTimeLabel).join(', ') : 'Not set'}
+                  <td className="py-2 px-4 text-gray-600 text-sm">
+                    {bus.trips.length > 0
+                      ? bus.trips.map((trip) => (
+                          <div key={trip.tripNumber}>
+                            Trip {trip.tripNumber}: {formatTimeLabel(trip.time)} ({trip.students.length} students)
+                          </div>
+                        ))
+                      : 'No trips'}
                   </td>
                   <td className="py-2 px-4 text-right">{bus.capacity}</td>
-                  <td className="py-2 px-4 text-right">{bus.trips}</td>
                   <td className="py-2 px-4">{bus.status}</td>
                   <td className="py-2 px-4 text-right space-x-1 flex justify-end">
                     <button
@@ -728,9 +774,9 @@ export default function BusesListPage() {
                       onClick={() => openLearnersModal(bus)}
                       className="inline-flex items-center justify-center text-blue-600 hover:bg-blue-50 rounded p-2"
                       aria-label={`Manage learners for ${bus.name}`}
-                      title={`Learners (${bus.students.length}/${bus.capacity})`}
+                      title="Manage trip students"
                     >
-                      <span className="text-xs font-semibold">{bus.students.length}/{bus.capacity}</span>
+                      <Plus size={16} className="text-blue-600" />
                     </button>
                     <button
                       type="button"
@@ -903,18 +949,6 @@ export default function BusesListPage() {
                       </div>
 
                       <div className="flex items-center">
-                        <label className="w-1/3 text-gray-500">Daily Trips</label>
-                        <input
-                          type="number"
-                          min="1"
-                          name="trips"
-                          value={editFormData.trips}
-                          onChange={handleEditChange}
-                          className="w-2/3 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-teal-500"
-                        />
-                      </div>
-
-                      <div className="flex items-center">
                         <label className="w-1/3 text-gray-500">Status</label>
                         <select
                           name="status"
@@ -1033,11 +1067,13 @@ export default function BusesListPage() {
 
       {showLearnersModal && selectedBusId && (() => {
         const bus = buses.find((b) => b.id === selectedBusId);
+        const selectedTrip = bus?.trips.find((t) => t.tripNumber === selectedTripNumber);
+        
         return bus ? (
           <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-            <div className="w-full max-w-3xl max-h-[90vh] overflow-hidden bg-white shadow-sm border border-gray-200 rounded">
+            <div className="w-full max-w-4xl max-h-[90vh] overflow-hidden bg-white shadow-sm border border-gray-200 rounded">
               <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-                <h2 className="text-2xl font-light text-gray-800">Manage Learners: {bus.name}</h2>
+                <h2 className="text-2xl font-light text-gray-800">Manage Trips: {bus.name}</h2>
                 <button
                   type="button"
                   onClick={closeLearnersModal}
@@ -1048,77 +1084,122 @@ export default function BusesListPage() {
               </div>
 
               <div className="p-6 overflow-y-auto max-h-[calc(90vh-12rem)]">
+                {/* Trips Selection */}
                 <div className="mb-6 pb-6 border-b border-gray-200">
-                  <h3 className="font-semibold text-gray-800 mb-4">Add New Student</h3>
-                  <div className="flex gap-3">
-                    <input
-                      type="text"
-                      placeholder="Admission Number"
-                      value={newStudentAdmission}
-                      onChange={(e) => setNewStudentAdmission(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && addStudent()}
-                      className="flex-1 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:border-teal-500"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Student Name"
-                      value={newStudentName}
-                      onChange={(e) => setNewStudentName(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && addStudent()}
-                      className="flex-1 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:border-teal-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={addStudent}
-                      disabled={bus.students.length >= bus.capacity}
-                      className="bg-teal-700 hover:bg-teal-800 disabled:bg-gray-400 text-white px-4 py-2 rounded font-medium flex items-center gap-2"
-                    >
-                      <Plus size={16} /> Add
-                    </button>
-                  </div>
-                  <div className="text-sm text-gray-500 mt-2">
-                    Capacity: {bus.students.length}/{bus.capacity} students
-                    {bus.students.length >= bus.capacity && <span className="text-red-600 ml-2">Bus is full</span>}
+                  <h3 className="font-semibold text-gray-800 mb-4">Select a Trip</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    {bus.trips.map((trip) => (
+                      <button
+                        key={trip.tripNumber}
+                        type="button"
+                        onClick={() => setSelectedTripNumber(trip.tripNumber)}
+                        className={`p-3 rounded border-2 text-left transition-all ${
+                          selectedTripNumber === trip.tripNumber
+                            ? 'border-teal-700 bg-teal-50'
+                            : 'border-gray-200 hover:border-teal-700'
+                        }`}
+                      >
+                        <div className="font-semibold text-gray-800">Trip {trip.tripNumber}</div>
+                        <div className="text-sm text-gray-600">{formatTimeLabel(trip.time)}</div>
+                        <div className="text-xs text-gray-500 mt-1">{trip.students.length} students</div>
+                      </button>
+                    ))}
                   </div>
                 </div>
 
-                <h3 className="font-semibold text-gray-800 mb-3">Current Roster</h3>
-                {bus.students.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse text-sm">
-                      <thead>
-                        <tr className="text-gray-500 border-b-2 border-gray-200 bg-gray-50">
-                          <th className="font-normal py-2 px-3">Admission Number</th>
-                          <th className="font-normal py-2 px-3">Student Name</th>
-                          <th className="font-normal py-2 px-3 text-right">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {bus.students.map((student, index) => (
-                          <tr
-                            key={`${student.admissionNumber}-${index}`}
-                            className={`border-b border-gray-100 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
-                          >
-                            <td className="py-2 px-3 font-mono text-teal-700">{student.admissionNumber}</td>
-                            <td className="py-2 px-3">{student.name}</td>
-                            <td className="py-2 px-3 text-right">
-                              <button
-                                type="button"
-                                onClick={() => removeStudent(student.admissionNumber)}
-                                className="inline-flex items-center justify-center text-red-600 hover:bg-red-50 rounded p-1"
-                                title="Remove student"
+                {/* Trip Students Management */}
+                {selectedTrip ? (
+                  <div>
+                    <div className="mb-6 pb-6 border-b border-gray-200">
+                      <h3 className="font-semibold text-gray-800 mb-4">Trip {selectedTrip.tripNumber} - {formatTimeLabel(selectedTrip.time)}</h3>
+                      <div className="flex gap-3">
+                        <input
+                          type="text"
+                          placeholder="Admission Number"
+                          value={newStudentAdmission}
+                          onChange={(e) => setNewStudentAdmission(e.target.value)}
+                          onKeyPress={(e) => e.key === 'Enter' && addStudent()}
+                          className="flex-1 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:border-teal-500"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Student Name"
+                          value={newStudentName}
+                          onChange={(e) => setNewStudentName(e.target.value)}
+                          onKeyPress={(e) => e.key === 'Enter' && addStudent()}
+                          className="flex-1 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:border-teal-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={addStudent}
+                          className="bg-teal-700 hover:bg-teal-800 text-white px-4 py-2 rounded font-medium flex items-center gap-2"
+                        >
+                          <Plus size={16} /> Add
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Warning Banner if exceeds capacity */}
+                    {selectedTrip.students.length > bus.capacity && (
+                      <div className="mb-4 p-4 bg-red-50 border-l-4 border-red-500 rounded">
+                        <div className="flex items-start gap-3">
+                          <div className="text-red-600 font-bold text-lg">⚠</div>
+                          <div>
+                            <h4 className="font-semibold text-red-800">Capacity Exceeded</h4>
+                            <p className="text-sm text-red-700 mt-1">
+                              This trip has {selectedTrip.students.length} students but the bus capacity is {bus.capacity}. 
+                              {selectedTrip.students.length - bus.capacity} more students than available seats.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    <h3 className="font-semibold text-gray-800 mb-3">
+                      Student Roster ({selectedTrip.students.length} students)
+                    </h3>
+                    {selectedTrip.students.length > 0 ? (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse text-sm">
+                          <thead>
+                            <tr className="text-gray-500 border-b-2 border-gray-200 bg-gray-50">
+                              <th className="font-normal py-2 px-3">Admission Number</th>
+                              <th className="font-normal py-2 px-3">Student Name</th>
+                              <th className="font-normal py-2 px-3 text-right">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {selectedTrip.students.map((student, index) => (
+                              <tr
+                                key={`${student.admissionNumber}-${index}`}
+                                className={`border-b border-gray-100 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
                               >
-                                <Trash2 size={14} className="text-red-600" />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                                <td className="py-2 px-3 font-mono text-teal-700">{student.admissionNumber}</td>
+                                <td className="py-2 px-3">{student.name}</td>
+                                <td className="py-2 px-3 text-right">
+                                  <button
+                                    type="button"
+                                    onClick={() => removeStudent(student.admissionNumber)}
+                                    className="inline-flex items-center justify-center text-red-600 hover:bg-red-50 rounded p-1"
+                                    title="Remove student"
+                                  >
+                                    <Trash2 size={14} className="text-red-600" />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-gray-400">
+                        No students added to this trip. Add a student above.
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="text-center py-8 text-gray-400">
-                    No students added yet. Add the first student above.
+                    Select a trip to manage students.
                   </div>
                 )}
               </div>
@@ -1126,11 +1207,11 @@ export default function BusesListPage() {
               <div className="flex items-center justify-between border-t border-gray-200 px-6 py-4 bg-gray-50">
                 <button
                   type="button"
-                  onClick={() => downloadLearnersPDF(bus)}
-                  disabled={bus.students.length === 0}
+                  onClick={() => selectedTrip && downloadLearnersPDF(bus, selectedTrip)}
+                  disabled={!selectedTrip || selectedTrip.students.length === 0}
                   className="bg-teal-700 hover:bg-teal-800 disabled:bg-gray-400 text-white px-4 py-2 rounded font-medium flex items-center gap-2"
                 >
-                  <Download size={16} /> Download Roster PDF
+                  <Download size={16} /> Download Trip Roster PDF
                 </button>
                 <button
                   type="button"
@@ -1159,7 +1240,7 @@ export default function BusesListPage() {
                   Are you sure you want to delete <span className="font-semibold">{bus.name}</span> (Bus No. {bus.id})?
                 </p>
                 <p className="text-sm text-gray-600">
-                  This action cannot be undone. All associated data including {bus.students.length} student(s) on this bus will be removed.
+                  This action cannot be undone. All associated data including {bus.trips.reduce((sum, trip) => sum + trip.students.length, 0)} student(s) across all trips will be removed.
                 </p>
               </div>
 
