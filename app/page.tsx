@@ -163,7 +163,7 @@ export default function Home() {
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <Link
-                href="/buses/new"
+                href="/buses/add"
                 className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-sm p-4 hover:border-[#0078d4] hover:shadow-md transition-all group"
               >
                 <div className="flex flex-col items-center text-center">

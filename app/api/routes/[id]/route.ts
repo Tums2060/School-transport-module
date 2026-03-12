@@ -3,10 +3,11 @@ import { getRouteById, getRoutes, writeData, Route } from '@/lib/dataUtils';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const route = await getRouteById(params.id);
+    const { id } = await params;
+    const route = await getRouteById(id);
 
     if (!route) {
       return NextResponse.json(
@@ -27,9 +28,10 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const body = await request.json();
     const { actorRole, route } = body as { actorRole?: string; route?: Partial<Route> };
 
@@ -41,7 +43,7 @@ export async function PUT(
     }
 
     const routes = await getRoutes();
-    const index = routes.findIndex((r) => r.id === params.id);
+    const index = routes.findIndex((r) => r.id === id);
 
     if (index === -1) {
       return NextResponse.json(
