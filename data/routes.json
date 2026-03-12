@@ -1,0 +1,266 @@
+[
+  {
+    "id": "route_001",
+    "routeName": "North Route",
+    "routeCode": "NR-001",
+    "busAssigned": "bus_001",
+    "driverAssigned": "user_004",
+    "driverName": "John Omondi",
+    "status": "Active",
+    "pickupTime": "06:30 AM",
+    "dropoffTime": "03:30 PM",
+    "distance": "28 km",
+    "estimatedDuration": "75 minutes",
+    "studentsAssigned": 35,
+    "stops": [
+      {
+        "stopNumber": 1,
+        "stopName": "Ruaka Shopping Center",
+        "location": "Ruaka",
+        "time": "06:30 AM",
+        "studentsCount": 8
+      },
+      {
+        "stopNumber": 2,
+        "stopName": "Roysambu Roundabout",
+        "location": "Roysambu",
+        "time": "06:45 AM",
+        "studentsCount": 7
+      },
+      {
+        "stopNumber": 3,
+        "stopName": "Kahawa Sukari Mall",
+        "location": "Kahawa Sukari",
+        "time": "07:00 AM",
+        "studentsCount": 10
+      },
+      {
+        "stopNumber": 4,
+        "stopName": "Kahawa West Gate",
+        "location": "Kahawa West",
+        "time": "07:15 AM",
+        "studentsCount": 6
+      },
+      {
+        "stopNumber": 5,
+        "stopName": "Kilimani Junction",
+        "location": "Kilimani",
+        "time": "07:25 AM",
+        "studentsCount": 4
+      }
+    ],
+    "createdAt": "2025-01-10T08:00:00Z",
+    "lastUpdated": "2026-02-15T10:30:00Z",
+    "isActive": true
+  },
+  {
+    "id": "route_002",
+    "routeName": "East Route",
+    "routeCode": "ER-002",
+    "busAssigned": "bus_002",
+    "driverAssigned": "user_005",
+    "driverName": "David Kipchoge",
+    "status": "Active",
+    "pickupTime": "06:45 AM",
+    "dropoffTime": "03:45 PM",
+    "distance": "32 km",
+    "estimatedDuration": "85 minutes",
+    "studentsAssigned": 33,
+    "stops": [
+      {
+        "stopNumber": 1,
+        "stopName": "Zimmerman Stage",
+        "location": "Zimmerman",
+        "time": "06:45 AM",
+        "studentsCount": 7
+      },
+      {
+        "stopNumber": 2,
+        "stopName": "Kasarani Stadium",
+        "location": "Kasarani",
+        "time": "07:00 AM",
+        "studentsCount": 6
+      },
+      {
+        "stopNumber": 3,
+        "stopName": "Mirema Junction",
+        "location": "Mirema",
+        "time": "07:12 AM",
+        "studentsCount": 5
+      },
+      {
+        "stopNumber": 4,
+        "stopName": "Ruiru Bypass",
+        "location": "Ruiru",
+        "time": "07:25 AM",
+        "studentsCount": 8
+      },
+      {
+        "stopNumber": 5,
+        "stopName": "Thika Road Mall",
+        "location": "Thika Road",
+        "time": "07:40 AM",
+        "studentsCount": 4
+      },
+      {
+        "stopNumber": 6,
+        "stopName": "Donholm Phase 8",
+        "location": "Donholm",
+        "time": "07:52 AM",
+        "studentsCount": 3
+      }
+    ],
+    "createdAt": "2025-01-10T08:00:00Z",
+    "lastUpdated": "2026-01-20T11:15:00Z",
+    "isActive": true
+  },
+  {
+    "id": "route_003",
+    "routeName": "South & West Route",
+    "routeCode": "SW-003",
+    "busAssigned": "bus_003",
+    "driverAssigned": "user_006",
+    "driverName": "Michael Njoroge",
+    "status": "Active",
+    "pickupTime": "06:30 AM",
+    "dropoffTime": "03:30 PM",
+    "distance": "35 km",
+    "estimatedDuration": "90 minutes",
+    "studentsAssigned": 32,
+    "stops": [
+      {
+        "stopNumber": 1,
+        "stopName": "Garden Estate Shops",
+        "location": "Garden Estate",
+        "time": "06:30 AM",
+        "studentsCount": 5
+      },
+      {
+        "stopNumber": 2,
+        "stopName": "Githurai 45",
+        "location": "Githurai",
+        "time": "06:45 AM",
+        "studentsCount": 6
+      },
+      {
+        "stopNumber": 3,
+        "stopName": "Pipeline Estate",
+        "location": "Pipeline",
+        "time": "07:00 AM",
+        "studentsCount": 4
+      },
+      {
+        "stopNumber": 4,
+        "stopName": "Embakasi Veterinary",
+        "location": "Embakasi",
+        "time": "07:12 AM",
+        "studentsCount": 3
+      },
+      {
+        "stopNumber": 5,
+        "stopName": "Umoja Inner Core",
+        "location": "Umoja",
+        "time": "07:22 AM",
+        "studentsCount": 4
+      },
+      {
+        "stopNumber": 6,
+        "stopName": "Buru Buru Shopping Center",
+        "location": "Buru Buru",
+        "time": "07:35 AM",
+        "studentsCount": 3
+      },
+      {
+        "stopNumber": 7,
+        "stopName": "Westlands Sarit Center",
+        "location": "Westlands",
+        "time": "07:48 AM",
+        "studentsCount": 4
+      },
+      {
+        "stopNumber": 8,
+        "stopName": "Kileleshwa Market",
+        "location": "Kileleshwa",
+        "time": "07:58 AM",
+        "studentsCount": 3
+      }
+    ],
+    "createdAt": "2025-01-10T08:00:00Z",
+    "lastUpdated": "2026-03-01T09:45:00Z",
+    "isActive": true
+  },
+  {
+    "id": "route_004",
+    "routeName": "Central Route",
+    "routeCode": "CR-004",
+    "busAssigned": null,
+    "driverAssigned": null,
+    "driverName": null,
+    "status": "Inactive",
+    "pickupTime": "07:00 AM",
+    "dropoffTime": "04:00 PM",
+    "distance": "22 km",
+    "estimatedDuration": "60 minutes",
+    "studentsAssigned": 0,
+    "stops": [
+      {
+        "stopNumber": 1,
+        "stopName": "Ngara Market",
+        "location": "Ngara",
+        "time": "07:00 AM",
+        "studentsCount": 0
+      },
+      {
+        "stopNumber": 2,
+        "stopName": "Parklands Mosque",
+        "location": "Parklands",
+        "time": "07:12 AM",
+        "studentsCount": 0
+      },
+      {
+        "stopNumber": 3,
+        "stopName": "Nairobi West Shopping Center",
+        "location": "Nairobi West",
+        "time": "07:25 AM",
+        "studentsCount": 0
+      },
+      {
+        "stopNumber": 4,
+        "stopName": "Langata Link",
+        "location": "Langata",
+        "time": "07:38 AM",
+        "studentsCount": 0
+      },
+      {
+        "stopNumber": 5,
+        "stopName": "South C Shopping Center",
+        "location": "South C",
+        "time": "07:50 AM",
+        "studentsCount": 0
+      }
+    ],
+    "createdAt": "2025-01-10T08:00:00Z",
+    "lastUpdated": "2025-12-15T14:20:00Z",
+    "isActive": false,
+    "notes": "Route suspended - Low student enrollment in this area"
+  },
+  {
+    "id": "route_005",
+    "routeName": "Emergency/Backup Route",
+    "routeCode": "ER-005",
+    "busAssigned": null,
+    "driverAssigned": null,
+    "driverName": null,
+    "status": "Inactive",
+    "pickupTime": "Variable",
+    "dropoffTime": "Variable",
+    "distance": "Variable",
+    "estimatedDuration": "Variable",
+    "studentsAssigned": 0,
+    "stops": [],
+    "createdAt": "2025-01-10T08:00:00Z",
+    "lastUpdated": "2025-01-10T08:00:00Z",
+    "isActive": false,
+    "notes": "Flexible route for special trips, field visits, or emergency replacements"
+  }
+]

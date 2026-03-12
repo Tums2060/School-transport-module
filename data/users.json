@@ -1,0 +1,140 @@
+[
+  {
+    "id": "user_001",
+    "username": "superadmin",
+    "password": "super@2026",
+    "email": "superadmin@company.edu",
+    "fullName": "James Mwangi",
+    "role": "superior_Admin",
+    "phone": "+254712345001",
+    "createdAt": "2025-01-15T08:00:00Z",
+    "lastLogin": "2026-03-12T07:30:00Z",
+    "isActive": true,
+    "permissions": {
+      "manageUsers": true,
+      "manageBuses": true,
+      "manageStudents": true,
+      "manageRoutes": true,
+      "manageDrivers": true,
+      "viewReports": true,
+      "systemSettings": true,
+      "approveRequests": true
+    }
+  },
+  {
+    "id": "user_002",
+    "username": "admin1",
+    "password": "admin@2026",
+    "email": "admin1@company.edu",
+    "fullName": "Sarah Wanjiru",
+    "role": "Admin",
+    "phone": "+254712345002",
+    "createdAt": "2025-02-20T10:00:00Z",
+    "lastLogin": "2026-03-11T16:45:00Z",
+    "isActive": true,
+    "permissions": {
+      "manageUsers": false,
+      "manageBuses": true,
+      "manageStudents": true,
+      "manageRoutes": true,
+      "manageDrivers": true,
+      "viewReports": true,
+      "systemSettings": false,
+      "approveRequests": true
+    }
+  },
+  {
+    "id": "user_003",
+    "username": "admin2",
+    "password": "admin@2026",
+    "email": "admin2@company.edu",
+    "fullName": "Peter Kamau",
+    "role": "Admin",
+    "phone": "+254712345003",
+    "createdAt": "2025-03-10T09:30:00Z",
+    "lastLogin": "2026-03-10T14:20:00Z",
+    "isActive": true,
+    "permissions": {
+      "manageUsers": false,
+      "manageBuses": true,
+      "manageStudents": true,
+      "manageRoutes": true,
+      "manageDrivers": true,
+      "viewReports": true,
+      "systemSettings": false,
+      "approveRequests": true
+    }
+  },
+  {
+    "id": "user_004",
+    "username": "driver1",
+    "password": "driver@2026",
+    "email": "driver1@company.edu",
+    "fullName": "John Omondi",
+    "role": "Bus_Driver",
+    "phone": "+254712345004",
+    "licenseNumber": "DL2345678",
+    "assignedBus": "bus_001",
+    "createdAt": "2025-04-05T11:00:00Z",
+    "lastLogin": "2026-03-12T06:00:00Z",
+    "isActive": true,
+    "permissions": {
+      "manageUsers": false,
+      "manageBuses": false,
+      "manageStudents": false,
+      "manageRoutes": false,
+      "manageDrivers": false,
+      "viewReports": false,
+      "systemSettings": false,
+      "approveRequests": false
+    }
+  },
+  {
+    "id": "user_005",
+    "username": "driver2",
+    "password": "driver@2026",
+    "email": "driver2@company.edu",
+    "fullName": "David Kipchoge",
+    "role": "Bus_Driver",
+    "phone": "+254712345005",
+    "licenseNumber": "DL3456789",
+    "assignedBus": "bus_002",
+    "createdAt": "2025-05-12T10:30:00Z",
+    "lastLogin": "2026-03-12T05:45:00Z",
+    "isActive": true,
+    "permissions": {
+      "manageUsers": false,
+      "manageBuses": false,
+      "manageStudents": false,
+      "manageRoutes": false,
+      "manageDrivers": false,
+      "viewReports": false,
+      "systemSettings": false,
+      "approveRequests": false
+    }
+  },
+  {
+    "id": "user_006",
+    "username": "driver3",
+    "password": "driver@2026",
+    "email": "driver3@company.edu",
+    "fullName": "Michael Njoroge",
+    "role": "Bus_Driver",
+    "phone": "+254712345006",
+    "licenseNumber": "DL4567890",
+    "assignedBus": "bus_003",
+    "createdAt": "2025-06-20T09:00:00Z",
+    "lastLogin": "2026-03-11T17:30:00Z",
+    "isActive": true,
+    "permissions": {
+      "manageUsers": false,
+      "manageBuses": false,
+      "manageStudents": false,
+      "manageRoutes": false,
+      "manageDrivers": false,
+      "viewReports": false,
+      "systemSettings": false,
+      "approveRequests": false
+    }
+  }
+]
