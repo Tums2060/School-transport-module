@@ -27,11 +27,7 @@ export default function TopNav() {
       const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
       const shouldBeDark = savedTheme === 'dark' || (!savedTheme && prefersDark);
 
-      if (shouldBeDark) {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
+      document.documentElement.setAttribute('data-theme', shouldBeDark ? 'dark' : 'light');
       setIsDarkMode(shouldBeDark);
 
       const userData = localStorage.getItem('user');
@@ -54,12 +50,7 @@ export default function TopNav() {
     const next = !isDarkMode;
     setIsDarkMode(next);
     localStorage.setItem('theme', next ? 'dark' : 'light');
-
-    if (next) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+    document.documentElement.setAttribute('data-theme', next ? 'dark' : 'light');
   };
 
   return (
