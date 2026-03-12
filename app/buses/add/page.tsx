@@ -18,6 +18,11 @@ type DriverDetails = {
   phone: string;
 };
 
+type Student = {
+  admissionNumber: string;
+  name: string;
+};
+
 type Bus = {
   id: string;
   name: string;
@@ -28,6 +33,7 @@ type Bus = {
   departureTimes: string[];
   routeDetails: RouteDetails;
   driver: DriverDetails;
+  students: Student[];
 };
 
 type TabKey = 'general' | 'route' | 'driver';
@@ -54,6 +60,7 @@ const initialBuses: Bus[] = [
       name: 'Samuel Njoroge',
       phone: '0712 345 678',
     },
+    students: [],
   },
   {
     id: 'BS002',
@@ -74,6 +81,7 @@ const initialBuses: Bus[] = [
       name: 'Mercy Wanjiku',
       phone: '0722 456 789',
     },
+    students: [],
   },
   {
     id: 'BS003',
@@ -94,6 +102,7 @@ const initialBuses: Bus[] = [
       name: 'David Mutua',
       phone: '0733 567 890',
     },
+    students: [],
   },
 ];
 
@@ -182,6 +191,16 @@ function normalizeBus(rawBus: Partial<Bus> & { time?: string }) {
     )
   );
 
+  const students = Array.isArray(rawBus.students)
+    ? rawBus.students.filter(
+        (student): student is Student =>
+          typeof student === 'object' &&
+          student !== null &&
+          typeof student.admissionNumber === 'string' &&
+          typeof student.name === 'string'
+      )
+    : [];
+
   return {
     id: rawBus.id || 'BS000',
     name: rawBus.name?.trim() || 'Unnamed Bus',
@@ -195,6 +214,7 @@ function normalizeBus(rawBus: Partial<Bus> & { time?: string }) {
       name: rawBus.driver?.name?.trim() || '',
       phone: rawBus.driver?.phone?.trim() || '',
     },
+    students,
   } satisfies Bus;
 }
 
@@ -352,6 +372,7 @@ export default function AddBusPage() {
         name: formData.driver.name.trim(),
         phone: formData.driver.phone.trim(),
       },
+      students: [],
     };
 
     const updatedBuses = [...buses, newBus];

@@ -17,6 +17,11 @@ type DriverDetails = {
   phone: string;
 };
 
+type Student = {
+  admissionNumber: string;
+  name: string;
+};
+
 type Bus = {
   id: string;
   name: string;
@@ -27,6 +32,7 @@ type Bus = {
   departureTimes: string[];
   routeDetails: RouteDetails;
   driver: DriverDetails;
+  students: Student[];
 };
 
 type BusFormData = {
@@ -65,6 +71,7 @@ const initialBuses: Bus[] = [
       name: 'Samuel Njoroge',
       phone: '0712 345 678',
     },
+    students: [],
   },
   {
     id: 'BS002',
@@ -85,6 +92,7 @@ const initialBuses: Bus[] = [
       name: 'Mercy Wanjiku',
       phone: '0722 456 789',
     },
+    students: [],
   },
   {
     id: 'BS003',
@@ -105,6 +113,7 @@ const initialBuses: Bus[] = [
       name: 'David Mutua',
       phone: '0733 567 890',
     },
+    students: [],
   },
 ];
 
@@ -187,6 +196,16 @@ function normalizeBus(rawBus: Partial<Bus> & { time?: string }) {
     )
   );
 
+  const students = Array.isArray(rawBus.students)
+    ? rawBus.students.filter(
+        (student): student is Student =>
+          typeof student === 'object' &&
+          student !== null &&
+          typeof student.admissionNumber === 'string' &&
+          typeof student.name === 'string'
+      )
+    : [];
+
   return {
     id: rawBus.id || 'BS000',
     name: rawBus.name?.trim() || 'Unnamed Bus',
@@ -200,6 +219,7 @@ function normalizeBus(rawBus: Partial<Bus> & { time?: string }) {
       name: rawBus.driver?.name?.trim() || '',
       phone: rawBus.driver?.phone?.trim() || '',
     },
+    students,
   } satisfies Bus;
 }
 
@@ -267,6 +287,11 @@ export default function BusesListPage() {
   const [activeTab, setActiveTab] = useState<TabKey>('general');
   const [editErrors, setEditErrors] = useState<string[]>([]);
   const [editFormData, setEditFormData] = useState<BusFormData | null>(null);
+  const [showLearnersModal, setShowLearnersModal] = useState(false);
+  const [selectedBusId, setSelectedBusId] = useState<string | null>(null);
+  const [newStudentAdmission, setNewStudentAdmission] = useState('');
+  const [newStudentName, setNewStudentName] = useState('');
+  const [deletingBusId, setDeletingBusId] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -436,6 +461,7 @@ export default function BusesListPage() {
     }
 
     const departureTimes = Array.from(new Set(editFormData.departureTimes.map(parseTimeValue).filter(Boolean)));
+    const originalBus = buses.find((b) => b.id === editingBusId);
     const updatedBus: Bus = {
       id: editFormData.id,
       name: editFormData.name.trim(),
@@ -455,12 +481,145 @@ export default function BusesListPage() {
         name: editFormData.driver.name.trim(),
         phone: editFormData.driver.phone.trim(),
       },
+      students: originalBus?.students || [],
     };
 
     const updatedBuses = buses.map((bus) => (bus.id === editingBusId ? updatedBus : bus));
     setBuses(updatedBuses);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedBuses));
     closeEditModal();
+  };
+
+  const openLearnersModal = (bus: Bus) => {
+    setSelectedBusId(bus.id);
+    setShowLearnersModal(true);
+  };
+
+  const closeLearnersModal = () => {
+    setShowLearnersModal(false);
+    setSelectedBusId(null);
+    setNewStudentAdmission('');
+    setNewStudentName('');
+  };
+
+  const addStudent = () => {
+    if (!selectedBusId || !newStudentAdmission.trim() || !newStudentName.trim()) {
+      return;
+    }
+
+    const bus = buses.find((b) => b.id === selectedBusId);
+    if (!bus) return;
+
+    if (bus.students.length >= bus.capacity) {
+      alert(`Bus capacity (${bus.capacity}) reached. Cannot add more students.`);
+      return;
+    }
+
+    const updatedBuses = buses.map((b) =>
+      b.id === selectedBusId
+        ? {
+            ...b,
+            students: [
+              ...b.students,
+              {
+                admissionNumber: newStudentAdmission.trim(),
+                name: newStudentName.trim(),
+              },
+            ],
+          }
+        : b
+    );
+
+    setBuses(updatedBuses);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedBuses));
+    setNewStudentAdmission('');
+    setNewStudentName('');
+  };
+
+  const removeStudent = (admissionNumber: string) => {
+    if (!selectedBusId) return;
+
+    const updatedBuses = buses.map((b) =>
+      b.id === selectedBusId
+        ? {
+            ...b,
+            students: b.students.filter((s) => s.admissionNumber !== admissionNumber),
+          }
+        : b
+    );
+
+    setBuses(updatedBuses);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedBuses));
+  };
+
+  const downloadLearnersPDF = async (bus: Bus) => {
+    if (bus.students.length === 0) {
+      alert('No students on this bus. Cannot generate report.');
+      return;
+    }
+
+    try {
+      const { jsPDF } = await import('jspdf');
+      const autoTable = (await import('jspdf-autotable')).default;
+      const document = new jsPDF({ orientation: 'portrait' });
+
+      document.setFillColor(13, 148, 136);
+      document.rect(0, 0, 210, 24, 'F');
+      document.setFontSize(16);
+      document.setTextColor(255, 255, 255);
+      document.text(`${bus.name} - Student Roster`, 14, 15);
+
+      document.setFontSize(10);
+      document.setTextColor(55, 65, 81);
+      document.text(`Bus No: ${bus.id}`, 14, 32);
+      document.text(`Route: ${bus.route}`, 14, 38);
+      document.text(`Generated on ${new Date().toLocaleString()}`, 14, 44);
+
+      autoTable(document, {
+        startY: 50,
+        head: [['Admission Number', 'Student Name']],
+        body: bus.students.map((student) => [student.admissionNumber, student.name]),
+        headStyles: {
+          fillColor: [13, 148, 136],
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+        },
+        bodyStyles: {
+          textColor: [31, 41, 55],
+          lineColor: [229, 231, 235],
+        },
+        alternateRowStyles: {
+          fillColor: [249, 250, 251],
+        },
+        styles: {
+          fontSize: 10,
+          cellPadding: 3,
+          valign: 'middle',
+        },
+      });
+
+      document.save(`${bus.id}-students-roster.pdf`);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Failed to generate PDF. Please try again.');
+    }
+  };
+
+  const handleDeleteBus = (busId: string) => {
+    setDeletingBusId(busId);
+  };
+
+  const confirmDeleteBus = () => {
+    if (!deletingBusId) return;
+
+    const updatedBuses = buses.filter((b) => b.id !== deletingBusId);
+    setBuses(updatedBuses);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedBuses));
+    setDeletingBusId(null);
+  };
+
+  const cancelDeleteBus = () => {
+    setDeletingBusId(null);
   };
 
   return (
@@ -554,14 +713,33 @@ export default function BusesListPage() {
                   <td className="py-2 px-4 text-right">{bus.capacity}</td>
                   <td className="py-2 px-4 text-right">{bus.trips}</td>
                   <td className="py-2 px-4">{bus.status}</td>
-                  <td className="py-2 px-4 text-right">
+                  <td className="py-2 px-4 text-right space-x-1 flex justify-end">
                     <button
                       type="button"
                       onClick={() => openEditModal(bus)}
                       className="inline-flex items-center justify-center text-teal-700 hover:bg-teal-50 rounded p-2"
                       aria-label={`Edit ${bus.name}`}
+                      title="Edit Bus"
                     >
                       <Pencil size={16} className="text-teal-700" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openLearnersModal(bus)}
+                      className="inline-flex items-center justify-center text-blue-600 hover:bg-blue-50 rounded p-2"
+                      aria-label={`Manage learners for ${bus.name}`}
+                      title={`Learners (${bus.students.length}/${bus.capacity})`}
+                    >
+                      <span className="text-xs font-semibold">{bus.students.length}/{bus.capacity}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteBus(bus.id)}
+                      className="inline-flex items-center justify-center text-red-600 hover:bg-red-50 rounded p-2"
+                      aria-label={`Delete ${bus.name}`}
+                      title="Delete Bus"
+                    >
+                      <Trash2 size={16} className="text-red-600" />
                     </button>
                   </td>
                 </tr>
@@ -852,6 +1030,159 @@ export default function BusesListPage() {
           </div>
         </div>
       )}
+
+      {showLearnersModal && selectedBusId && (() => {
+        const bus = buses.find((b) => b.id === selectedBusId);
+        return bus ? (
+          <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+            <div className="w-full max-w-3xl max-h-[90vh] overflow-hidden bg-white shadow-sm border border-gray-200 rounded">
+              <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+                <h2 className="text-2xl font-light text-gray-800">Manage Learners: {bus.name}</h2>
+                <button
+                  type="button"
+                  onClick={closeLearnersModal}
+                  className="text-gray-500 hover:text-gray-800"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="p-6 overflow-y-auto max-h-[calc(90vh-12rem)]">
+                <div className="mb-6 pb-6 border-b border-gray-200">
+                  <h3 className="font-semibold text-gray-800 mb-4">Add New Student</h3>
+                  <div className="flex gap-3">
+                    <input
+                      type="text"
+                      placeholder="Admission Number"
+                      value={newStudentAdmission}
+                      onChange={(e) => setNewStudentAdmission(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && addStudent()}
+                      className="flex-1 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:border-teal-500"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Student Name"
+                      value={newStudentName}
+                      onChange={(e) => setNewStudentName(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && addStudent()}
+                      className="flex-1 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:border-teal-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={addStudent}
+                      disabled={bus.students.length >= bus.capacity}
+                      className="bg-teal-700 hover:bg-teal-800 disabled:bg-gray-400 text-white px-4 py-2 rounded font-medium flex items-center gap-2"
+                    >
+                      <Plus size={16} /> Add
+                    </button>
+                  </div>
+                  <div className="text-sm text-gray-500 mt-2">
+                    Capacity: {bus.students.length}/{bus.capacity} students
+                    {bus.students.length >= bus.capacity && <span className="text-red-600 ml-2">Bus is full</span>}
+                  </div>
+                </div>
+
+                <h3 className="font-semibold text-gray-800 mb-3">Current Roster</h3>
+                {bus.students.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-sm">
+                      <thead>
+                        <tr className="text-gray-500 border-b-2 border-gray-200 bg-gray-50">
+                          <th className="font-normal py-2 px-3">Admission Number</th>
+                          <th className="font-normal py-2 px-3">Student Name</th>
+                          <th className="font-normal py-2 px-3 text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {bus.students.map((student, index) => (
+                          <tr
+                            key={`${student.admissionNumber}-${index}`}
+                            className={`border-b border-gray-100 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
+                          >
+                            <td className="py-2 px-3 font-mono text-teal-700">{student.admissionNumber}</td>
+                            <td className="py-2 px-3">{student.name}</td>
+                            <td className="py-2 px-3 text-right">
+                              <button
+                                type="button"
+                                onClick={() => removeStudent(student.admissionNumber)}
+                                className="inline-flex items-center justify-center text-red-600 hover:bg-red-50 rounded p-1"
+                                title="Remove student"
+                              >
+                                <Trash2 size={14} className="text-red-600" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-400">
+                    No students added yet. Add the first student above.
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between border-t border-gray-200 px-6 py-4 bg-gray-50">
+                <button
+                  type="button"
+                  onClick={() => downloadLearnersPDF(bus)}
+                  disabled={bus.students.length === 0}
+                  className="bg-teal-700 hover:bg-teal-800 disabled:bg-gray-400 text-white px-4 py-2 rounded font-medium flex items-center gap-2"
+                >
+                  <Download size={16} /> Download Roster PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={closeLearnersModal}
+                  className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded font-medium"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null;
+      })()}
+
+      {deletingBusId && (() => {
+        const bus = buses.find((b) => b.id === deletingBusId);
+        return bus ? (
+          <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+            <div className="w-full max-w-md bg-white shadow-sm border border-gray-200 rounded">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h2 className="text-lg font-semibold text-gray-800">Delete Bus</h2>
+              </div>
+
+              <div className="px-6 py-4">
+                <p className="text-gray-700 mb-2">
+                  Are you sure you want to delete <span className="font-semibold">{bus.name}</span> (Bus No. {bus.id})?
+                </p>
+                <p className="text-sm text-gray-600">
+                  This action cannot be undone. All associated data including {bus.students.length} student(s) on this bus will be removed.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 border-t border-gray-200 px-6 py-4">
+                <button
+                  type="button"
+                  onClick={cancelDeleteBus}
+                  className="text-gray-700 hover:bg-gray-50 px-4 py-2 rounded border border-gray-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmDeleteBus}
+                  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-medium"
+                >
+                  Delete Bus
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null;
+      })()}
     </div>
   );
 }
