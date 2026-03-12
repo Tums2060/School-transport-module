@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ChangeEvent } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Check, Plus, Trash2 } from 'lucide-react';
@@ -27,107 +27,57 @@ type Trip = {
   tripNumber: number;
   time: string;
   students: Student[];
+  routeDetails: RouteDetails;
 };
 
 type Bus = {
   id: string;
   name: string;
-  route: string;
   capacity: number;
   status: string;
-  routeDetails: RouteDetails;
   driver: DriverDetails;
   trips: Trip[];
 };
 
-type TabKey = 'general' | 'route' | 'driver';
+type TripFormData = {
+  time: string;
+  routeDetails: RouteDetails;
+};
+
+type FormData = {
+  name: string;
+  capacity: string;
+  status: string;
+  driver: DriverDetails;
+  trips: TripFormData[];
+};
+
+type TabKey = 'general' | 'trips' | 'driver';
 
 const STORAGE_KEY = 'school_buses';
 
-const initialBuses: Bus[] = [
-  {
-    id: 'BS001',
-    name: 'Scania - Kiserian',
-    route: 'Kiserian - Rongai - Upper Hill Campus',
-    capacity: 45,
-    trips: 2,
-    status: 'Active',
-    departureTimes: ['06:30', '15:45'],
-    routeDetails: {
-      area: 'Kiserian',
-      pickupPoints: 'Kiserian Stage, Corner Baridi, Rongai SGR',
-      majorStops: 'Magadi Road, Rongai Town, Langata Road',
-      destination: 'Upper Hill Campus',
-      notes: 'Morning pickup starts at Kiserian Stage and drops learners at the main gate.',
-    },
-    driver: {
-      name: 'Samuel Njoroge',
-      phone: '0712 345 678',
-    },
-    students: [],
-  },
-  {
-    id: 'BS002',
-    name: 'Isuzu - Thika Road',
-    route: 'Thika Road - Muthaiga - Main Campus',
-    capacity: 33,
-    trips: 1,
-    status: 'Active',
-    departureTimes: ['07:00', '16:00'],
-    routeDetails: {
-      area: 'Thika Road Corridor',
-      pickupPoints: 'Garden City, Roasters, Muthaiga Roundabout',
-      majorStops: 'Thika Superhighway, Forest Road',
-      destination: 'Main Campus',
-      notes: 'Designed for learners joining from the Thika Road corridor.',
-    },
-    driver: {
-      name: 'Mercy Wanjiku',
-      phone: '0722 456 789',
-    },
-    students: [],
-  },
-  {
-    id: 'BS003',
-    name: 'Nissan - Syokimau',
-    route: 'Syokimau - Mombasa Road - Junior School',
-    capacity: 25,
-    trips: 2,
-    status: 'Maintenance',
-    departureTimes: ['06:45', '12:00', '16:15'],
-    routeDetails: {
-      area: 'Syokimau',
-      pickupPoints: 'Syokimau Station, Gateway Mall, Mlolongo',
-      majorStops: 'Mombasa Road, JKIA Interchange',
-      destination: 'Junior School',
-      notes: 'Currently under scheduled maintenance before returning to service.',
-    },
-    driver: {
-      name: 'David Mutua',
-      phone: '0733 567 890',
-    },
-    students: [],
-  },
-];
+const emptyRouteDetails: RouteDetails = {
+  area: '',
+  pickupPoints: '',
+  majorStops: '',
+  destination: '',
+  notes: '',
+};
 
-const emptyFormData = {
+const emptyFormData: FormData = {
   name: '',
-  route: '',
   capacity: '',
-  trips: '',
   status: 'Active',
-  departureTimes: ['08:00'],
-  routeDetails: {
-    area: '',
-    pickupPoints: '',
-    majorStops: '',
-    destination: '',
-    notes: '',
-  },
   driver: {
     name: '',
     phone: '',
   },
+  trips: [
+    {
+      time: '08:00',
+      routeDetails: { ...emptyRouteDetails },
+    },
+  ],
 };
 
 function parseTimeValue(value: string) {
@@ -170,56 +120,59 @@ function parseTimeValue(value: string) {
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
 }
 
-function buildRouteSummary(routeDetails: RouteDetails) {
-  const parts = [routeDetails.area, routeDetails.majorStops, routeDetails.destination]
-    .map((value) => value.trim())
-    .filter(Boolean);
-
-  return parts.join(' - ');
-}
-
-function normalizeBus(rawBus: Partial<Bus> & { time?: string }) {
-  const routeDetails: RouteDetails = {
-    area: rawBus.routeDetails?.area?.trim() || rawBus.route?.split(' - ')[0] || '',
-    pickupPoints: rawBus.routeDetails?.pickupPoints?.trim() || '',
-    majorStops: rawBus.routeDetails?.majorStops?.trim() || rawBus.route || '',
-    destination: rawBus.routeDetails?.destination?.trim() || 'School Campus',
-    notes: rawBus.routeDetails?.notes?.trim() || '',
+function normalizeBus(rawBus: Record<string, unknown>): Bus {
+  const legacyRouteDetails = (rawBus.routeDetails || {}) as Partial<RouteDetails>;
+  const fallbackRouteDetails: RouteDetails = {
+    area: legacyRouteDetails.area || '',
+    pickupPoints: legacyRouteDetails.pickupPoints || '',
+    majorStops: legacyRouteDetails.majorStops || (typeof rawBus.route === 'string' ? rawBus.route : ''),
+    destination: legacyRouteDetails.destination || '',
+    notes: legacyRouteDetails.notes || '',
   };
 
-  const departureTimes = Array.from(
-    new Set(
-      (Array.isArray(rawBus.departureTimes) ? rawBus.departureTimes : rawBus.time ? [rawBus.time] : [])
-        .map((time) => parseTimeValue(String(time)))
-        .filter(Boolean)
-    )
-  );
+  const rawTrips = Array.isArray(rawBus.trips) ? rawBus.trips : [];
 
-  const students = Array.isArray(rawBus.students)
-    ? rawBus.students.filter(
-        (student): student is Student =>
-          typeof student === 'object' &&
-          student !== null &&
-          typeof student.admissionNumber === 'string' &&
-          typeof student.name === 'string'
-      )
+  const trips: Trip[] = rawTrips.length > 0 && typeof rawTrips[0] === 'object'
+    ? rawTrips
+        .map((rawTrip, index) => {
+          const trip = rawTrip as Record<string, unknown>;
+          const rawStudents = Array.isArray(trip.students) ? trip.students : [];
+
+          return {
+            tripNumber: typeof trip.tripNumber === 'number' ? trip.tripNumber : index + 1,
+            time: typeof trip.time === 'string' ? parseTimeValue(trip.time) : '',
+            students: rawStudents.filter(
+              (student): student is Student =>
+                typeof student === 'object' &&
+                student !== null &&
+                typeof (student as Student).admissionNumber === 'string' &&
+                typeof (student as Student).name === 'string'
+            ),
+            routeDetails: {
+              area: ((trip.routeDetails as RouteDetails | undefined)?.area || fallbackRouteDetails.area).trim(),
+              pickupPoints: ((trip.routeDetails as RouteDetails | undefined)?.pickupPoints || fallbackRouteDetails.pickupPoints).trim(),
+              majorStops: ((trip.routeDetails as RouteDetails | undefined)?.majorStops || fallbackRouteDetails.majorStops).trim(),
+              destination: ((trip.routeDetails as RouteDetails | undefined)?.destination || fallbackRouteDetails.destination).trim(),
+              notes: ((trip.routeDetails as RouteDetails | undefined)?.notes || fallbackRouteDetails.notes).trim(),
+            },
+          };
+        })
+        .filter((trip) => trip.time)
+        .sort((a, b) => a.time.localeCompare(b.time))
+        .map((trip, index) => ({ ...trip, tripNumber: index + 1 }))
     : [];
 
   return {
-    id: rawBus.id || 'BS000',
-    name: rawBus.name?.trim() || 'Unnamed Bus',
-    route: rawBus.route?.trim() || buildRouteSummary(routeDetails) || 'Route pending',
+    id: typeof rawBus.id === 'string' ? rawBus.id : 'BS000',
+    name: typeof rawBus.name === 'string' ? rawBus.name : 'Unnamed Bus',
     capacity: Number(rawBus.capacity) || 0,
-    trips: Number(rawBus.trips) || 0,
-    status: rawBus.status?.trim() || 'Active',
-    departureTimes,
-    routeDetails,
+    status: typeof rawBus.status === 'string' ? rawBus.status : 'Active',
     driver: {
-      name: rawBus.driver?.name?.trim() || '',
-      phone: rawBus.driver?.phone?.trim() || '',
+      name: typeof (rawBus.driver as DriverDetails | undefined)?.name === 'string' ? (rawBus.driver as DriverDetails).name : '',
+      phone: typeof (rawBus.driver as DriverDetails | undefined)?.phone === 'string' ? (rawBus.driver as DriverDetails).phone : '',
     },
-    students,
-  } satisfies Bus;
+    trips,
+  };
 }
 
 function nextBusId(buses: Bus[]) {
@@ -235,48 +188,60 @@ export default function AddBusPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabKey>('general');
   const [errors, setErrors] = useState<string[]>([]);
-  const [formData, setFormData] = useState(emptyFormData);
+  const [formData, setFormData] = useState<FormData>(emptyFormData);
 
-  const handleChange = (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = event.target;
+  const handleChange = (name: 'name' | 'capacity' | 'status', value: string) => {
     setFormData((current) => ({ ...current, [name]: value }));
   };
 
-  const handleNestedChange = (
-    section: 'routeDetails' | 'driver',
-    field: keyof RouteDetails | keyof DriverDetails,
-    value: string
-  ) => {
+  const handleDriverChange = (field: keyof DriverDetails, value: string) => {
     setFormData((current) => ({
       ...current,
-      [section]: {
-        ...current[section],
+      driver: {
+        ...current.driver,
         [field]: value,
       },
     }));
   };
 
-  const handleTimeChange = (index: number, value: string) => {
+  const handleTripTimeChange = (index: number, value: string) => {
     setFormData((current) => ({
       ...current,
-      departureTimes: current.departureTimes.map((time, timeIndex) => (timeIndex === index ? value : time)),
+      trips: current.trips.map((trip, tripIndex) => (tripIndex === index ? { ...trip, time: value } : trip)),
     }));
   };
 
-  const handleAddTimeSlot = () => {
+  const handleTripRouteChange = (index: number, field: keyof RouteDetails, value: string) => {
     setFormData((current) => ({
       ...current,
-      departureTimes: [...current.departureTimes, ''],
+      trips: current.trips.map((trip, tripIndex) =>
+        tripIndex === index
+          ? {
+              ...trip,
+              routeDetails: {
+                ...trip.routeDetails,
+                [field]: value,
+              },
+            }
+          : trip
+      ),
     }));
   };
 
-  const handleRemoveTimeSlot = (index: number) => {
+  const handleAddTripSlot = () => {
     setFormData((current) => ({
       ...current,
-      departureTimes:
-        current.departureTimes.length === 1
-          ? ['']
-          : current.departureTimes.filter((_, timeIndex) => timeIndex !== index),
+      trips: [...current.trips, { time: '', routeDetails: { ...emptyRouteDetails } }],
+    }));
+  };
+
+  const handleRemoveTripSlot = (index: number) => {
+    setFormData((current) => ({
+      ...current,
+      trips:
+        current.trips.length === 1
+          ? [{ time: '', routeDetails: { ...emptyRouteDetails } }]
+          : current.trips.filter((_, tripIndex) => tripIndex !== index),
     }));
   };
 
@@ -288,50 +253,63 @@ export default function AddBusPage() {
 
   const validateForm = () => {
     const nextErrors: string[] = [];
-    const normalizedTimes = Array.from(new Set(formData.departureTimes.map(parseTimeValue).filter(Boolean)));
 
     if (!formData.name.trim()) {
       nextErrors.push('Bus name is required.');
-    }
-
-    if (!formData.route.trim() && !buildRouteSummary(formData.routeDetails)) {
-      nextErrors.push('Add a main route or complete the route details section.');
     }
 
     if ((Number(formData.capacity) || 0) <= 0) {
       nextErrors.push('Capacity must be greater than zero.');
     }
 
-    if ((Number(formData.trips) || 0) <= 0) {
-      nextErrors.push('Daily trips must be greater than zero.');
-    }
+    const normalizedTimes = formData.trips.map((trip) => parseTimeValue(trip.time)).filter(Boolean);
 
     if (normalizedTimes.length === 0) {
-      nextErrors.push('Add at least one departure time.');
+      nextErrors.push('Add at least one trip time.');
     }
 
-    if (!formData.routeDetails.area.trim()) {
-      nextErrors.push('Route area is required.');
+    if (new Set(normalizedTimes).size !== normalizedTimes.length) {
+      nextErrors.push('Trip times must be unique.');
     }
 
-    if (!formData.routeDetails.pickupPoints.trim()) {
-      nextErrors.push('Pickup points are required so learners can be traced accurately.');
-    }
+    formData.trips.forEach((trip, index) => {
+      const tripLabel = `Trip ${index + 1}`;
 
-    if (!formData.routeDetails.destination.trim()) {
-      nextErrors.push('Destination is required.');
-    }
+      if (!parseTimeValue(trip.time)) {
+        nextErrors.push(`${tripLabel}: time is required.`);
+      }
+
+      if (!trip.routeDetails.area.trim()) {
+        nextErrors.push(`${tripLabel}: route area is required.`);
+      }
+
+      if (!trip.routeDetails.pickupPoints.trim()) {
+        nextErrors.push(`${tripLabel}: pickup points are required.`);
+      }
+
+      if (!trip.routeDetails.majorStops.trim()) {
+        nextErrors.push(`${tripLabel}: major stops are required.`);
+      }
+
+      if (!trip.routeDetails.destination.trim()) {
+        nextErrors.push(`${tripLabel}: destination is required.`);
+      }
+
+      if (!trip.routeDetails.notes.trim()) {
+        nextErrors.push(`${tripLabel}: route notes are required.`);
+      }
+    });
 
     if (!formData.driver.name.trim()) {
       nextErrors.push('Driver name is required.');
     }
 
-    if (nextErrors.some((error) => error.includes('departure time') || error.includes('Capacity') || error.includes('trips') || error.includes('Bus name') || error.includes('main route'))) {
-      setActiveTab('general');
-    } else if (nextErrors.some((error) => error.includes('Route') || error.includes('Pickup') || error.includes('Destination'))) {
-      setActiveTab('route');
+    if (nextErrors.some((error) => error.includes('Trip'))) {
+      setActiveTab('trips');
     } else if (nextErrors.some((error) => error.includes('Driver'))) {
       setActiveTab('driver');
+    } else {
+      setActiveTab('general');
     }
 
     setErrors(nextErrors);
@@ -343,40 +321,46 @@ export default function AddBusPage() {
       return;
     }
 
-    let buses: Bus[] = initialBuses;
+    let buses: Bus[] = [];
 
     try {
       const existingData = localStorage.getItem(STORAGE_KEY);
-      buses = existingData
-        ? JSON.parse(existingData).map((bus: Partial<Bus> & { time?: string }) => normalizeBus(bus))
-        : initialBuses;
+      buses = existingData ? (JSON.parse(existingData) as Record<string, unknown>[]).map((bus) => normalizeBus(bus)) : [];
     } catch {
-      buses = initialBuses;
+      buses = [];
     }
 
-    const departureTimes = Array.from(new Set(formData.departureTimes.map(parseTimeValue).filter(Boolean)));
-    const routeSummary = formData.route.trim() || buildRouteSummary(formData.routeDetails);
+    const normalizedTrips = formData.trips
+      .map((trip) => ({
+        time: parseTimeValue(trip.time),
+        routeDetails: {
+          area: trip.routeDetails.area.trim(),
+          pickupPoints: trip.routeDetails.pickupPoints.trim(),
+          majorStops: trip.routeDetails.majorStops.trim(),
+          destination: trip.routeDetails.destination.trim(),
+          notes: trip.routeDetails.notes.trim(),
+        },
+      }))
+      .filter((trip) => trip.time)
+      .sort((a, b) => a.time.localeCompare(b.time));
+
+    const trips: Trip[] = normalizedTrips.map((trip, index) => ({
+      tripNumber: index + 1,
+      time: trip.time,
+      students: [],
+      routeDetails: trip.routeDetails,
+    }));
 
     const newBus: Bus = {
       id: nextBusId(buses),
       name: formData.name.trim(),
-      route: routeSummary,
       capacity: Number(formData.capacity) || 0,
-      trips: Number(formData.trips) || 0,
       status: formData.status,
-      departureTimes,
-      routeDetails: {
-        area: formData.routeDetails.area.trim(),
-        pickupPoints: formData.routeDetails.pickupPoints.trim(),
-        majorStops: formData.routeDetails.majorStops.trim(),
-        destination: formData.routeDetails.destination.trim(),
-        notes: formData.routeDetails.notes.trim(),
-      },
       driver: {
         name: formData.driver.name.trim(),
         phone: formData.driver.phone.trim(),
       },
-      students: [],
+      trips,
     };
 
     const updatedBuses = [...buses, newBus];
@@ -427,10 +411,10 @@ export default function AddBusPage() {
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab('route')}
-            className={activeTab === 'route' ? 'font-semibold text-teal-700 border-b-2 border-teal-700 pb-1' : 'hover:text-teal-700 cursor-pointer'}
+            onClick={() => setActiveTab('trips')}
+            className={activeTab === 'trips' ? 'font-semibold text-teal-700 border-b-2 border-teal-700 pb-1' : 'hover:text-teal-700 cursor-pointer'}
           >
-            Route Details
+            Trip Routes
           </button>
           <button
             type="button"
@@ -462,89 +446,31 @@ export default function AddBusPage() {
                     <label className="w-1/3 text-gray-500">Bus Name</label>
                     <input
                       type="text"
-                      name="name"
                       value={formData.name}
-                      onChange={handleChange}
+                      onChange={(event) => handleChange('name', event.target.value)}
                       placeholder="e.g. Scania - Kiserian"
                       className="w-2/3 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-teal-500"
                     />
                   </div>
 
                   <div className="flex items-center">
-                    <label className="w-1/3 text-gray-500">Main Route</label>
+                    <label className="w-1/3 text-gray-500">Capacity (Students)</label>
                     <input
-                      type="text"
-                      name="route"
-                      value={formData.route}
-                      onChange={handleChange}
-                      placeholder="e.g. Kiserian - Rongai - Campus"
+                      type="number"
+                      min="1"
+                      value={formData.capacity}
+                      onChange={(event) => handleChange('capacity', event.target.value)}
                       className="w-2/3 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-teal-500"
                     />
-                  </div>
-
-                  <div>
-                    <label className="block text-gray-500 mb-2">Departure Times</label>
-                    <div className="space-y-2">
-                      {formData.departureTimes.map((time, index) => (
-                        <div key={`${index}-${time}`} className="flex items-center gap-2">
-                          <input
-                            type="time"
-                            value={time}
-                            onChange={(event) => handleTimeChange(index, event.target.value)}
-                            className="w-40 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-teal-500"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveTimeSlot(index)}
-                            className="text-gray-500 hover:text-gray-700"
-                          >
-                            <Trash2 size={16} className="text-gray-500" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleAddTimeSlot}
-                      className="mt-3 flex items-center gap-1 text-teal-700 hover:bg-teal-50 px-2 py-1 rounded"
-                    >
-                      <Plus size={16} className="text-teal-700" />
-                      <span>Add time slot</span>
-                    </button>
                   </div>
                 </div>
 
                 <div className="space-y-4">
                   <div className="flex items-center">
-                    <label className="w-1/3 text-gray-500">Capacity (Students)</label>
-                    <input
-                      type="number"
-                      min="1"
-                      name="capacity"
-                      value={formData.capacity}
-                      onChange={handleChange}
-                      className="w-2/3 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-teal-500"
-                    />
-                  </div>
-
-                  <div className="flex items-center">
-                    <label className="w-1/3 text-gray-500">Daily Trips</label>
-                    <input
-                      type="number"
-                      min="1"
-                      name="trips"
-                      value={formData.trips}
-                      onChange={handleChange}
-                      className="w-2/3 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-teal-500"
-                    />
-                  </div>
-
-                  <div className="flex items-center">
                     <label className="w-1/3 text-gray-500">Status</label>
                     <select
-                      name="status"
                       value={formData.status}
-                      onChange={handleChange}
+                      onChange={(event) => handleChange('status', event.target.value)}
                       className="w-2/3 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-teal-500 bg-white"
                     >
                       <option value="Active">Active</option>
@@ -557,68 +483,91 @@ export default function AddBusPage() {
             </>
           )}
 
-          {activeTab === 'route' && (
+          {activeTab === 'trips' && (
             <>
               <h2 className="font-semibold text-gray-800 border-b border-gray-200 pb-2 mb-4">
-                Route Details
+                Trip Time and Route Details
               </h2>
 
-              <div className="grid grid-cols-2 gap-x-12 gap-y-4">
-                <div className="space-y-4">
-                  <div className="flex items-center">
-                    <label className="w-1/3 text-gray-500">Route Area</label>
-                    <input
-                      type="text"
-                      value={formData.routeDetails.area}
-                      onChange={(event) => handleNestedChange('routeDetails', 'area', event.target.value)}
-                      placeholder="e.g. Kiserian and Rongai"
-                      className="w-2/3 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-teal-500"
-                    />
-                  </div>
+              <div className="space-y-4">
+                {formData.trips.map((trip, index) => (
+                  <div key={`trip-${index}`} className="border border-gray-200 rounded p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-semibold text-gray-800">Trip {index + 1}</h3>
+                      <button type="button" onClick={() => handleRemoveTripSlot(index)} className="text-gray-500 hover:text-red-600">
+                        <Trash2 size={16} className="text-gray-500" />
+                      </button>
+                    </div>
 
-                  <div className="flex items-start">
-                    <label className="w-1/3 text-gray-500 pt-1">Pickup Points</label>
-                    <textarea
-                      value={formData.routeDetails.pickupPoints}
-                      onChange={(event) => handleNestedChange('routeDetails', 'pickupPoints', event.target.value)}
-                      placeholder="List pickup points in order of collection"
-                      className="w-2/3 border border-gray-300 rounded px-2 py-1 min-h-24 focus:outline-none focus:border-teal-500"
-                    />
-                  </div>
+                    <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+                      <div className="flex items-center">
+                        <label className="w-1/3 text-gray-500">Time</label>
+                        <input
+                          type="time"
+                          value={trip.time}
+                          onChange={(event) => handleTripTimeChange(index, event.target.value)}
+                          className="w-2/3 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-teal-500"
+                        />
+                      </div>
 
-                  <div className="flex items-start">
-                    <label className="w-1/3 text-gray-500 pt-1">Major Stops</label>
-                    <textarea
-                      value={formData.routeDetails.majorStops}
-                      onChange={(event) => handleNestedChange('routeDetails', 'majorStops', event.target.value)}
-                      placeholder="Describe the roads or landmarks the bus follows"
-                      className="w-2/3 border border-gray-300 rounded px-2 py-1 min-h-24 focus:outline-none focus:border-teal-500"
-                    />
-                  </div>
-                </div>
+                      <div className="flex items-center">
+                        <label className="w-1/3 text-gray-500">Route Area</label>
+                        <input
+                          type="text"
+                          value={trip.routeDetails.area}
+                          onChange={(event) => handleTripRouteChange(index, 'area', event.target.value)}
+                          className="w-2/3 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-teal-500"
+                        />
+                      </div>
 
-                <div className="space-y-4">
-                  <div className="flex items-center">
-                    <label className="w-1/3 text-gray-500">Destination</label>
-                    <input
-                      type="text"
-                      value={formData.routeDetails.destination}
-                      onChange={(event) => handleNestedChange('routeDetails', 'destination', event.target.value)}
-                      placeholder="e.g. Main Campus Gate"
-                      className="w-2/3 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-teal-500"
-                    />
-                  </div>
+                      <div className="col-span-2 flex items-start">
+                        <label className="w-1/6 text-gray-500 pt-1">Pickup Points</label>
+                        <textarea
+                          value={trip.routeDetails.pickupPoints}
+                          onChange={(event) => handleTripRouteChange(index, 'pickupPoints', event.target.value)}
+                          className="w-5/6 border border-gray-300 rounded px-2 py-1 min-h-24 focus:outline-none focus:border-teal-500"
+                        />
+                      </div>
 
-                  <div className="flex items-start">
-                    <label className="w-1/3 text-gray-500 pt-1">Route Notes</label>
-                    <textarea
-                      value={formData.routeDetails.notes}
-                      onChange={(event) => handleNestedChange('routeDetails', 'notes', event.target.value)}
-                      placeholder="Add safety notes, learner handover details, or route instructions"
-                      className="w-2/3 border border-gray-300 rounded px-2 py-1 min-h-28 focus:outline-none focus:border-teal-500"
-                    />
+                      <div className="col-span-2 flex items-start">
+                        <label className="w-1/6 text-gray-500 pt-1">Major Stops</label>
+                        <textarea
+                          value={trip.routeDetails.majorStops}
+                          onChange={(event) => handleTripRouteChange(index, 'majorStops', event.target.value)}
+                          className="w-5/6 border border-gray-300 rounded px-2 py-1 min-h-24 focus:outline-none focus:border-teal-500"
+                        />
+                      </div>
+
+                      <div className="flex items-center">
+                        <label className="w-1/3 text-gray-500">Destination</label>
+                        <input
+                          type="text"
+                          value={trip.routeDetails.destination}
+                          onChange={(event) => handleTripRouteChange(index, 'destination', event.target.value)}
+                          className="w-2/3 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-teal-500"
+                        />
+                      </div>
+
+                      <div className="flex items-start">
+                        <label className="w-1/3 text-gray-500 pt-1">Route Notes</label>
+                        <textarea
+                          value={trip.routeDetails.notes}
+                          onChange={(event) => handleTripRouteChange(index, 'notes', event.target.value)}
+                          className="w-2/3 border border-gray-300 rounded px-2 py-1 min-h-24 focus:outline-none focus:border-teal-500"
+                        />
+                      </div>
+                    </div>
                   </div>
-                </div>
+                ))}
+
+                <button
+                  type="button"
+                  onClick={handleAddTripSlot}
+                  className="mt-3 flex items-center gap-1 text-teal-700 hover:bg-teal-50 px-2 py-1 rounded"
+                >
+                  <Plus size={16} className="text-teal-700" />
+                  <span>Add trip</span>
+                </button>
               </div>
             </>
           )}
@@ -636,7 +585,7 @@ export default function AddBusPage() {
                     <input
                       type="text"
                       value={formData.driver.name}
-                      onChange={(event) => handleNestedChange('driver', 'name', event.target.value)}
+                      onChange={(event) => handleDriverChange('name', event.target.value)}
                       placeholder="e.g. Samuel Njoroge"
                       className="w-2/3 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-teal-500"
                     />
@@ -649,7 +598,7 @@ export default function AddBusPage() {
                     <input
                       type="tel"
                       value={formData.driver.phone}
-                      onChange={(event) => handleNestedChange('driver', 'phone', event.target.value)}
+                      onChange={(event) => handleDriverChange('phone', event.target.value)}
                       placeholder="Optional contact number"
                       className="w-2/3 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-teal-500"
                     />
