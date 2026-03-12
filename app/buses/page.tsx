@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ChangeEvent } from 'react';
 import Link from 'next/link';
-import { Search, Settings, Plus, Download, ArrowDown } from 'lucide-react';
+import { Search, Settings, Plus, Download, ArrowDown, Pencil, Trash2, Check, X } from 'lucide-react';
 
 type RouteDetails = {
   area: string;
@@ -28,6 +28,20 @@ type Bus = {
   routeDetails: RouteDetails;
   driver: DriverDetails;
 };
+
+type BusFormData = {
+  id: string;
+  name: string;
+  route: string;
+  capacity: string;
+  trips: string;
+  status: string;
+  departureTimes: string[];
+  routeDetails: RouteDetails;
+  driver: DriverDetails;
+};
+
+type TabKey = 'general' | 'route' | 'driver';
 
 const STORAGE_KEY = 'school_buses';
 
@@ -189,9 +203,70 @@ function normalizeBus(rawBus: Partial<Bus> & { time?: string }) {
   } satisfies Bus;
 }
 
+function createFormData(bus: Bus): BusFormData {
+  return {
+    id: bus.id,
+    name: bus.name,
+    route: bus.route,
+    capacity: String(bus.capacity),
+    trips: String(bus.trips),
+    status: bus.status,
+    departureTimes: bus.departureTimes.length > 0 ? [...bus.departureTimes] : [''],
+    routeDetails: { ...bus.routeDetails },
+    driver: { ...bus.driver },
+  };
+}
+
+function validateBusForm(formData: BusFormData) {
+  const nextErrors: string[] = [];
+  const normalizedTimes = Array.from(new Set(formData.departureTimes.map(parseTimeValue).filter(Boolean)));
+
+  if (!formData.name.trim()) {
+    nextErrors.push('Bus name is required.');
+  }
+
+  if (!formData.route.trim() && !buildRouteSummary(formData.routeDetails)) {
+    nextErrors.push('Add a main route or complete the route details section.');
+  }
+
+  if ((Number(formData.capacity) || 0) <= 0) {
+    nextErrors.push('Capacity must be greater than zero.');
+  }
+
+  if ((Number(formData.trips) || 0) <= 0) {
+    nextErrors.push('Daily trips must be greater than zero.');
+  }
+
+  if (normalizedTimes.length === 0) {
+    nextErrors.push('Add at least one departure time.');
+  }
+
+  if (!formData.routeDetails.area.trim()) {
+    nextErrors.push('Route area is required.');
+  }
+
+  if (!formData.routeDetails.pickupPoints.trim()) {
+    nextErrors.push('Pickup points are required so learners can be traced accurately.');
+  }
+
+  if (!formData.routeDetails.destination.trim()) {
+    nextErrors.push('Destination is required.');
+  }
+
+  if (!formData.driver.name.trim()) {
+    nextErrors.push('Driver name is required.');
+  }
+
+  return nextErrors;
+}
+
 export default function BusesListPage() {
   const [buses, setBuses] = useState<Bus[]>(initialBuses);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [editingBusId, setEditingBusId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<TabKey>('general');
+  const [editErrors, setEditErrors] = useState<string[]>([]);
+  const [editFormData, setEditFormData] = useState<BusFormData | null>(null);
 
   useEffect(() => {
     try {
@@ -267,6 +342,127 @@ export default function BusesListPage() {
     }
   };
 
+  const openEditModal = (bus: Bus) => {
+    setEditingBusId(bus.id);
+    setEditFormData(createFormData(bus));
+    setEditErrors([]);
+    setActiveTab('general');
+  };
+
+  const closeEditModal = () => {
+    setEditingBusId(null);
+    setEditFormData(null);
+    setEditErrors([]);
+    setActiveTab('general');
+  };
+
+  const handleEditChange = (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = event.target;
+    setEditFormData((current) => (current ? { ...current, [name]: value } : current));
+  };
+
+  const handleEditNestedChange = (
+    section: 'routeDetails' | 'driver',
+    field: keyof RouteDetails | keyof DriverDetails,
+    value: string
+  ) => {
+    setEditFormData((current) => (
+      current
+        ? {
+            ...current,
+            [section]: {
+              ...current[section],
+              [field]: value,
+            },
+          }
+        : current
+    ));
+  };
+
+  const handleEditTimeChange = (index: number, value: string) => {
+    setEditFormData((current) => (
+      current
+        ? {
+            ...current,
+            departureTimes: current.departureTimes.map((time, timeIndex) => (timeIndex === index ? value : time)),
+          }
+        : current
+    ));
+  };
+
+  const handleAddTimeSlot = () => {
+    setEditFormData((current) => (
+      current
+        ? {
+            ...current,
+            departureTimes: [...current.departureTimes, ''],
+          }
+        : current
+    ));
+  };
+
+  const handleRemoveTimeSlot = (index: number) => {
+    setEditFormData((current) => (
+      current
+        ? {
+            ...current,
+            departureTimes:
+              current.departureTimes.length === 1
+                ? ['']
+                : current.departureTimes.filter((_, timeIndex) => timeIndex !== index),
+          }
+        : current
+    ));
+  };
+
+  const handleSaveEdit = () => {
+    if (!editFormData || !editingBusId) {
+      return;
+    }
+
+    const nextErrors = validateBusForm(editFormData);
+
+    if (nextErrors.length > 0) {
+      if (nextErrors.some((error) => error.includes('Route') || error.includes('Pickup') || error.includes('Destination'))) {
+        setActiveTab('route');
+      } else if (nextErrors.some((error) => error.includes('Driver'))) {
+        setActiveTab('driver');
+      } else {
+        setActiveTab('general');
+      }
+
+      setEditErrors(nextErrors);
+      return;
+    }
+
+    const departureTimes = Array.from(new Set(editFormData.departureTimes.map(parseTimeValue).filter(Boolean)));
+    const updatedBus: Bus = {
+      id: editFormData.id,
+      name: editFormData.name.trim(),
+      route: editFormData.route.trim() || buildRouteSummary(editFormData.routeDetails),
+      capacity: Number(editFormData.capacity) || 0,
+      trips: Number(editFormData.trips) || 0,
+      status: editFormData.status,
+      departureTimes,
+      routeDetails: {
+        area: editFormData.routeDetails.area.trim(),
+        pickupPoints: editFormData.routeDetails.pickupPoints.trim(),
+        majorStops: editFormData.routeDetails.majorStops.trim(),
+        destination: editFormData.routeDetails.destination.trim(),
+        notes: editFormData.routeDetails.notes.trim(),
+      },
+      driver: {
+        name: editFormData.driver.name.trim(),
+        phone: editFormData.driver.phone.trim(),
+      },
+    };
+
+    const updatedBuses = buses.map((bus) => (bus.id === editingBusId ? updatedBus : bus));
+    setBuses(updatedBuses);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedBuses));
+    closeEditModal();
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-sm text-gray-800">
       <div className="bg-[#1F1F1F] text-white flex items-center justify-between px-4 py-2">
@@ -334,6 +530,7 @@ export default function BusesListPage() {
                 <th className="font-normal py-2 px-4 text-right">Capacity</th>
                 <th className="font-normal py-2 px-4 text-right">Trips</th>
                 <th className="font-normal py-2 px-4">Status</th>
+                <th className="font-normal py-2 px-4 text-right">Edit</th>
               </tr>
             </thead>
             <tbody>
@@ -357,6 +554,16 @@ export default function BusesListPage() {
                   <td className="py-2 px-4 text-right">{bus.capacity}</td>
                   <td className="py-2 px-4 text-right">{bus.trips}</td>
                   <td className="py-2 px-4">{bus.status}</td>
+                  <td className="py-2 px-4 text-right">
+                    <button
+                      type="button"
+                      onClick={() => openEditModal(bus)}
+                      className="inline-flex items-center justify-center text-teal-700 hover:bg-teal-50 rounded p-2"
+                      aria-label={`Edit ${bus.name}`}
+                    >
+                      <Pencil size={16} className="text-teal-700" />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -369,6 +576,282 @@ export default function BusesListPage() {
           </div>
         )}
       </div>
+
+      {editFormData && editingBusId && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="w-full max-w-5xl max-h-[90vh] overflow-hidden bg-white shadow-sm border border-gray-200">
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+              <div className="flex items-center space-x-4">
+                <button type="button" onClick={closeEditModal} className="text-gray-500 hover:text-gray-800">
+                  <X size={20} />
+                </button>
+                <h2 className="text-2xl font-light text-gray-800">Update Bus Card</h2>
+              </div>
+
+              <div className="flex space-x-4">
+                <button
+                  type="button"
+                  onClick={handleSaveEdit}
+                  className="flex items-center space-x-1 text-teal-700 hover:bg-teal-50 px-3 py-1 rounded font-medium"
+                >
+                  <Check size={16} className="text-teal-700" /> <span>Save</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={closeEditModal}
+                  className="flex items-center space-x-1 text-gray-500 hover:bg-gray-50 px-3 py-1 rounded"
+                >
+                  <X size={16} className="text-gray-500" /> <span>Cancel</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="px-6 py-2 border-b border-gray-200 flex space-x-6 text-gray-600">
+              <button
+                type="button"
+                onClick={() => setActiveTab('general')}
+                className={activeTab === 'general' ? 'font-semibold text-teal-700 border-b-2 border-teal-700 pb-1' : 'hover:text-teal-700 cursor-pointer'}
+              >
+                General Info
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('route')}
+                className={activeTab === 'route' ? 'font-semibold text-teal-700 border-b-2 border-teal-700 pb-1' : 'hover:text-teal-700 cursor-pointer'}
+              >
+                Route Details
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('driver')}
+                className={activeTab === 'driver' ? 'font-semibold text-teal-700 border-b-2 border-teal-700 pb-1' : 'hover:text-teal-700 cursor-pointer'}
+              >
+                Driver Info
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-8rem)]">
+              {editErrors.length > 0 && (
+                <div className="mb-5 border border-red-200 bg-red-50 px-4 py-3 text-red-700 rounded">
+                  {editErrors.map((error) => (
+                    <p key={error}>{error}</p>
+                  ))}
+                </div>
+              )}
+
+              {activeTab === 'general' && (
+                <>
+                  <h3 className="font-semibold text-gray-800 border-b border-gray-200 pb-2 mb-4">
+                    Bus General Information
+                  </h3>
+
+                  <div className="grid grid-cols-2 gap-x-12 gap-y-4">
+                    <div className="space-y-4">
+                      <div className="flex items-center">
+                        <label className="w-1/3 text-gray-500">Bus No.</label>
+                        <input
+                          type="text"
+                          value={editFormData.id}
+                          disabled
+                          className="w-2/3 border border-gray-200 rounded px-2 py-1 bg-gray-50 text-gray-500"
+                        />
+                      </div>
+
+                      <div className="flex items-center">
+                        <label className="w-1/3 text-gray-500">Bus Name</label>
+                        <input
+                          type="text"
+                          name="name"
+                          value={editFormData.name}
+                          onChange={handleEditChange}
+                          className="w-2/3 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-teal-500"
+                        />
+                      </div>
+
+                      <div className="flex items-center">
+                        <label className="w-1/3 text-gray-500">Main Route</label>
+                        <input
+                          type="text"
+                          name="route"
+                          value={editFormData.route}
+                          onChange={handleEditChange}
+                          className="w-2/3 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-teal-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-gray-500 mb-2">Departure Times</label>
+                        <div className="space-y-2">
+                          {editFormData.departureTimes.map((time, index) => (
+                            <div key={`${index}-${time}`} className="flex items-center gap-2">
+                              <input
+                                type="time"
+                                value={time}
+                                onChange={(event) => handleEditTimeChange(index, event.target.value)}
+                                className="w-40 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-teal-500"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveTimeSlot(index)}
+                                className="text-gray-500 hover:text-gray-700"
+                              >
+                                <Trash2 size={16} className="text-gray-500" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleAddTimeSlot}
+                          className="mt-3 flex items-center gap-1 text-teal-700 hover:bg-teal-50 px-2 py-1 rounded"
+                        >
+                          <Plus size={16} className="text-teal-700" />
+                          <span>Add time slot</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="flex items-center">
+                        <label className="w-1/3 text-gray-500">Capacity (Students)</label>
+                        <input
+                          type="number"
+                          min="1"
+                          name="capacity"
+                          value={editFormData.capacity}
+                          onChange={handleEditChange}
+                          className="w-2/3 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-teal-500"
+                        />
+                      </div>
+
+                      <div className="flex items-center">
+                        <label className="w-1/3 text-gray-500">Daily Trips</label>
+                        <input
+                          type="number"
+                          min="1"
+                          name="trips"
+                          value={editFormData.trips}
+                          onChange={handleEditChange}
+                          className="w-2/3 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-teal-500"
+                        />
+                      </div>
+
+                      <div className="flex items-center">
+                        <label className="w-1/3 text-gray-500">Status</label>
+                        <select
+                          name="status"
+                          value={editFormData.status}
+                          onChange={handleEditChange}
+                          className="w-2/3 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-teal-500 bg-white"
+                        >
+                          <option value="Active">Active</option>
+                          <option value="Maintenance">Maintenance</option>
+                          <option value="Out of Service">Out of Service</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {activeTab === 'route' && (
+                <>
+                  <h3 className="font-semibold text-gray-800 border-b border-gray-200 pb-2 mb-4">
+                    Route Details
+                  </h3>
+
+                  <div className="grid grid-cols-2 gap-x-12 gap-y-4">
+                    <div className="space-y-4">
+                      <div className="flex items-center">
+                        <label className="w-1/3 text-gray-500">Route Area</label>
+                        <input
+                          type="text"
+                          value={editFormData.routeDetails.area}
+                          onChange={(event) => handleEditNestedChange('routeDetails', 'area', event.target.value)}
+                          className="w-2/3 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-teal-500"
+                        />
+                      </div>
+
+                      <div className="flex items-start">
+                        <label className="w-1/3 text-gray-500 pt-1">Pickup Points</label>
+                        <textarea
+                          value={editFormData.routeDetails.pickupPoints}
+                          onChange={(event) => handleEditNestedChange('routeDetails', 'pickupPoints', event.target.value)}
+                          className="w-2/3 border border-gray-300 rounded px-2 py-1 min-h-24 focus:outline-none focus:border-teal-500"
+                        />
+                      </div>
+
+                      <div className="flex items-start">
+                        <label className="w-1/3 text-gray-500 pt-1">Major Stops</label>
+                        <textarea
+                          value={editFormData.routeDetails.majorStops}
+                          onChange={(event) => handleEditNestedChange('routeDetails', 'majorStops', event.target.value)}
+                          className="w-2/3 border border-gray-300 rounded px-2 py-1 min-h-24 focus:outline-none focus:border-teal-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="flex items-center">
+                        <label className="w-1/3 text-gray-500">Destination</label>
+                        <input
+                          type="text"
+                          value={editFormData.routeDetails.destination}
+                          onChange={(event) => handleEditNestedChange('routeDetails', 'destination', event.target.value)}
+                          className="w-2/3 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-teal-500"
+                        />
+                      </div>
+
+                      <div className="flex items-start">
+                        <label className="w-1/3 text-gray-500 pt-1">Route Notes</label>
+                        <textarea
+                          value={editFormData.routeDetails.notes}
+                          onChange={(event) => handleEditNestedChange('routeDetails', 'notes', event.target.value)}
+                          className="w-2/3 border border-gray-300 rounded px-2 py-1 min-h-28 focus:outline-none focus:border-teal-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {activeTab === 'driver' && (
+                <>
+                  <h3 className="font-semibold text-gray-800 border-b border-gray-200 pb-2 mb-4">
+                    Driver Information
+                  </h3>
+
+                  <div className="grid grid-cols-2 gap-x-12 gap-y-4">
+                    <div className="space-y-4">
+                      <div className="flex items-center">
+                        <label className="w-1/3 text-gray-500">Driver Name</label>
+                        <input
+                          type="text"
+                          value={editFormData.driver.name}
+                          onChange={(event) => handleEditNestedChange('driver', 'name', event.target.value)}
+                          className="w-2/3 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-teal-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="flex items-center">
+                        <label className="w-1/3 text-gray-500">Phone</label>
+                        <input
+                          type="tel"
+                          value={editFormData.driver.phone}
+                          onChange={(event) => handleEditNestedChange('driver', 'phone', event.target.value)}
+                          className="w-2/3 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-teal-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
