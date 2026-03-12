@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { Search, Settings, Plus, Download, ArrowDown } from 'lucide-react';
 
 // 1. Initial Mock Data
 const initialBuses = [
@@ -32,8 +33,8 @@ export default function BusesListPage() {
           <span className="font-semibold text-lg">Dynamics 365 Business Central</span>
         </div>
         <div className="flex items-center space-x-4">
-          <button className="hover:text-gray-300">🔍</button>
-          <button className="hover:text-gray-300">⚙️</button>
+          <button className="hover:text-gray-300"><Search size={18} /></button>
+          <button className="hover:text-gray-300"><Settings size={18} /></button>
           <div className="bg-pink-600 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold">
             TM
           </div>
@@ -57,15 +58,15 @@ export default function BusesListPage() {
           <h1 className="text-xl font-light text-gray-800">Transport: <span className="font-semibold text-gray-600">Buses List</span></h1>
           
           <div className="flex space-x-4">
-            <button className="flex items-center space-x-1 text-teal-700 hover:bg-teal-50 px-3 py-1 rounded">
-              <span>🔍</span> <span>Search</span>
-            </button>
+            <Link href="/buses/search" className="flex items-center space-x-1 text-teal-700 hover:bg-teal-50 px-3 py-1 rounded">
+              <Search size={16} className="text-teal-700" /> <span>Search</span>
+            </Link>
             {/* This will eventually link to the Add Bus page */}
             <Link href="/buses/add" className="flex items-center space-x-1 text-teal-700 hover:bg-teal-50 px-3 py-1 rounded">
-              <span>➕</span> <span>New</span>
+              <Plus size={16} className="text-teal-700" /> <span>New</span>
             </Link>
             <button className="flex items-center space-x-1 text-teal-700 hover:bg-teal-50 px-3 py-1 rounded">
-              <span>Report ⬇️</span>
+              <span>Report</span> <Download size={16} className="text-teal-700" />
             </button>
           </div>
         </div>
@@ -75,7 +76,7 @@ export default function BusesListPage() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="text-gray-500 border-b-2 border-gray-200">
-                <th className="font-normal py-2 px-4 w-24">No. ↓</th>
+                <th className="font-normal py-2 px-4 w-24 flex items-center gap-1">No. <ArrowDown size={12} className="text-gray-500" /></th>
                 <th className="font-normal py-2 px-4">Bus Name</th>
                 <th className="font-normal py-2 px-4">Route</th>
                 <th className="font-normal py-2 px-4 text-right">Capacity</th>

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { ArrowLeft, Check, Trash2 } from 'lucide-react';
 
 export default function AddBusPage() {
   const router = useRouter();
@@ -63,8 +64,8 @@ export default function AddBusPage() {
         {/* Card Header & Actions */}
         <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
           <div className="flex items-center space-x-4">
-            <Link href="/buses" className="text-gray-500 hover:text-gray-800 text-lg">
-              ←
+            <Link href="/buses" className="text-gray-500 hover:text-gray-800">
+              <ArrowLeft size={20} />
             </Link>
             <h1 className="text-2xl font-light text-gray-800">New Bus Card</h1>
           </div>
@@ -74,10 +75,10 @@ export default function AddBusPage() {
               onClick={handleSave}
               className="flex items-center space-x-1 text-teal-700 hover:bg-teal-50 px-3 py-1 rounded font-medium"
             >
-              <span>✔️</span> <span>Save</span>
+              <Check size={16} className="text-teal-700" /> <span>Save</span>
             </button>
             <button className="flex items-center space-x-1 text-gray-500 hover:bg-gray-50 px-3 py-1 rounded">
-              <span>🗑️</span>
+              <Trash2 size={16} className="text-gray-500" />
             </button>
           </div>
         </div>

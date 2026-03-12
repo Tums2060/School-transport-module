@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { Settings } from 'lucide-react';
 
 // We define a type for our bus to keep TypeScript happy
 type Bus = {
@@ -71,7 +72,7 @@ export default function SearchBusesPage() {
           <div>
             <h2 className="font-semibold text-gray-800 mb-4 flex items-center justify-between">
               <span>Filter list by...</span>
-              <span className="text-gray-400 cursor-pointer hover:text-gray-800">⚙️</span>
+              <Settings size={16} className="text-gray-400 cursor-pointer hover:text-gray-800" />
             </h2>
 
             {/* Text Search Filter */}
