@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import Link from 'next/link';
-import { Search, Plus, Download, ArrowDown, Pencil, Trash2, Check, X } from 'lucide-react';
+import { Search, Plus, Download, ArrowDown, Pencil, Trash2, Check, X, Filter } from 'lucide-react';
 
 type RouteDetails = {
   area: string;
@@ -342,6 +342,12 @@ function validateBusForm(formData: BusFormData) {
 export default function BusesListPage() {
   const [buses, setBuses] = useState<Bus[]>(initialBuses);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [showSearchBar, setShowSearchBar] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const searchContainerRef = useRef<HTMLDivElement | null>(null);
+  const [statusFilter, setStatusFilter] = useState('All');
+  const [driverFilter, setDriverFilter] = useState('');
   const [editingBusId, setEditingBusId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>('general');
   const [editErrors, setEditErrors] = useState<string[]>([]);
@@ -655,25 +661,92 @@ export default function BusesListPage() {
     [selectedBus, selectedTripNumber]
   );
 
+  const filteredBuses = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    const driverTerm = driverFilter.trim().toLowerCase();
+
+    return buses.filter((bus) => {
+      const routeText = bus.trips
+        .map((trip) => routeSummary(trip.routeDetails))
+        .join(' ')
+        .toLowerCase();
+
+      const matchesSearch =
+        term === '' ||
+        bus.id.toLowerCase().includes(term) ||
+        bus.name.toLowerCase().includes(term) ||
+        bus.driver.name.toLowerCase().includes(term) ||
+        routeText.includes(term);
+
+      const matchesStatus = statusFilter === 'All' || bus.status === statusFilter;
+      const matchesDriver = driverTerm === '' || bus.driver.name.toLowerCase().includes(driverTerm);
+
+      return matchesSearch && matchesStatus && matchesDriver;
+    });
+  }, [buses, searchTerm, statusFilter, driverFilter]);
+
+  useEffect(() => {
+    function handleDocumentClick(event: MouseEvent) {
+      if (!showSearchBar || !searchContainerRef.current) {
+        return;
+      }
+
+      const target = event.target as Node;
+      if (!searchContainerRef.current.contains(target)) {
+        setShowSearchBar(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handleDocumentClick);
+    return () => document.removeEventListener('mousedown', handleDocumentClick);
+  }, [showSearchBar]);
+
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-sm text-gray-800">
       {/* Secondary module nav - combined from both branches */}
-      <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center space-x-6 text-teal-700">
-        <span className="font-bold text-gray-800">SCHOOL SYSTEM</span>
+      <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700/50 px-4 py-3 flex items-center space-x-6 text-teal-700">
+        <span className="font-bold text-gray-800 dark:text-gray-100">SCHOOL SYSTEM</span>
         <Link href="/students" className="hover:underline">Students</Link>
         <span className="font-bold border-b-2 border-teal-700 pb-1 cursor-default">Transport Module</span>
         <Link href="/routes" className="hover:underline">Routes</Link>
-        <Link href="/" className="hover:underline text-gray-500">← Dashboard</Link>
+        <Link href="/" className="hover:underline text-gray-500 dark:text-gray-400">← Dashboard</Link>
       </div>
 
-      <div className="p-6 bg-white m-4 shadow-sm border border-gray-100">
+      <div className="p-6 bg-white dark:bg-transparent m-4 shadow-sm border border-gray-200 dark:border-gray-700/40">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-xl font-light text-gray-800">Transport: <span className="font-semibold text-gray-600">Buses List</span></h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-light text-gray-800">Transport: <span className="font-semibold text-gray-600">Buses List</span></h1>
+            <div ref={searchContainerRef}>
+              {showSearchBar ? (
+                <input
+                  autoFocus
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search bus no, name, route or driver"
+                  className="w-80 border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowSearchBar(true)}
+                  className="inline-flex items-center justify-center w-8 h-8 rounded border border-gray-300 dark:border-gray-600 text-teal-700 hover:bg-teal-50 dark:hover:bg-teal-900/25"
+                  title="Search"
+                >
+                  <Search size={16} className="text-teal-700" />
+                </button>
+              )}
+            </div>
+          </div>
 
           <div className="flex space-x-4">
-            <Link href="/buses/search" className="flex items-center space-x-1 text-teal-700 hover:bg-teal-50 px-3 py-1 rounded">
-              <Search size={16} className="text-teal-700" /> <span>Search</span>
-            </Link>
+            <button
+              type="button"
+              onClick={() => setShowFilters((prev) => !prev)}
+              className="inline-flex items-center justify-center w-8 h-8 rounded border border-gray-300 dark:border-gray-600 text-teal-700 hover:bg-teal-50 dark:hover:bg-teal-900/25"
+              title="Filters"
+            >
+              <Filter size={16} className="text-teal-700" />
+            </button>
             <Link href="/buses/add" className="flex items-center space-x-1 text-teal-700 hover:bg-teal-50 px-3 py-1 rounded">
               <Plus size={16} className="text-teal-700" /> <span>New</span>
             </Link>
@@ -689,10 +762,51 @@ export default function BusesListPage() {
           </div>
         </div>
 
+        {showFilters && (
+          <div className="mb-4 p-4 border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-transparent">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-gray-500 dark:text-gray-400 mb-1">Driver Name</label>
+                <input
+                  value={driverFilter}
+                  onChange={(e) => setDriverFilter(e.target.value)}
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+                />
+              </div>
+              <div>
+                <label className="block text-gray-500 dark:text-gray-400 mb-1">Status</label>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+                >
+                  <option value="All">All Statuses</option>
+                  <option value="Active">Active</option>
+                  <option value="Maintenance">Maintenance</option>
+                  <option value="Out of Service">Out of Service</option>
+                </select>
+              </div>
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDriverFilter('');
+                    setStatusFilter('All');
+                    setSearchTerm('');
+                  }}
+                  className="text-teal-700 hover:underline"
+                >
+                  Reset filters
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="text-gray-500 border-b-2 border-gray-200">
+              <tr className="text-gray-500 dark:text-gray-400 border-b-2 border-gray-200 dark:border-gray-700">
                 <th className="font-normal py-2 px-4 w-24">
                   <div className="flex items-center gap-1">
                     <span>No.</span>
@@ -709,9 +823,9 @@ export default function BusesListPage() {
               </tr>
             </thead>
             <tbody>
-              {buses.map((bus, index) => (
-                <tr key={bus.id} className={`border-b border-gray-100 hover:bg-teal-50 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
-                  <td className="py-2 px-4 text-teal-700 font-medium">{bus.id}</td>
+              {filteredBuses.map((bus, index) => (
+                <tr key={bus.id} className={`border-b border-gray-100 dark:border-gray-700/30 hover:bg-teal-50 dark:hover:bg-teal-900/25 transition-colors ${index % 2 === 0 ? 'bg-white dark:bg-transparent' : 'bg-gray-50/50 dark:bg-white/2'}`}>
+                  <td className="py-2 px-4 text-teal-700 font-medium cursor-pointer hover:underline" onClick={() => openEditModal(bus)}>{bus.id}</td>
                   <td className="py-2 px-4">{bus.name}</td>
                   <td className="py-2 px-4 text-xs text-gray-600">
                     {bus.trips.length > 0
