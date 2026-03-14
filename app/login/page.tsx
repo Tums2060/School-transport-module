@@ -32,8 +32,12 @@ export default function LoginPage() {
         // Store user data in localStorage (in production, use secure session/JWT)
         localStorage.setItem('user', JSON.stringify(result.user));
         
-        // Redirect to dashboard
-        router.push('/');
+        // Route Finance Manager to their own homepage
+        if (result.user.role === 'Finance_Manager') {
+          router.push('/finance/home');
+        } else {
+          router.push('/');
+        }
       } else {
         setError(result.message);
       }
@@ -57,6 +61,7 @@ export default function LoginPage() {
     { role: 'Superior Admin', username: 'superadmin', password: 'super@2026' },
     { role: 'Admin', username: 'admin1', password: 'admin@2026' },
     { role: 'Bus Driver', username: 'driver1', password: 'driver@2026' },
+    { role: 'Finance Manager', username: 'finance1', password: 'finance@2026' },
   ];
 
   return (

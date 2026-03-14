@@ -136,5 +136,27 @@
       "systemSettings": false,
       "approveRequests": false
     }
+  },
+  {
+    "id": "user_007",
+    "username": "finance1",
+    "password": "finance@2026",
+    "email": "finance1@company.edu",
+    "fullName": "Grace Achieng",
+    "role": "Finance_Manager",
+    "phone": "+254712345007",
+    "createdAt": "2026-01-10T08:00:00Z",
+    "lastLogin": null,
+    "isActive": true,
+    "permissions": {
+      "manageUsers": false,
+      "manageBuses": false,
+      "manageStudents": false,
+      "manageRoutes": false,
+      "manageDrivers": false,
+      "viewReports": true,
+      "systemSettings": false,
+      "approveRequests": false
+    }
   }
 ]

@@ -1,132 +1,130 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
+import { Search, Plus, Filter, Pencil, X } from 'lucide-react';
 
-type AppRoute = {
+type Route = {
   id: string;
   routeName: string;
-  routeCode: string;
-  busAssigned: string | null;
-  driverAssigned: string | null;
-  driverName: string | null;
+  places: string;
+  fare: number;
   status: 'Active' | 'Inactive';
-  pickupTime: string;
-  dropoffTime: string;
-  distance: string;
-  estimatedDuration: string;
-  studentsAssigned: number;
-  stops: Array<{
-    stopNumber: number;
-    stopName: string;
-    location: string;
-    time: string;
-    studentsCount: number;
-  }>;
   createdAt: string;
-  lastUpdated: string;
-  isActive: boolean;
-  notes?: string;
+};
+
+type BusTrip = {
+  tripNumber: number;
+  time: string;
+  routeId?: string;
 };
 
 type Bus = {
   id: string;
-  busNumber: string;
-  driverName?: string;
+  name: string;
+  status: string;
+  trips: BusTrip[];
 };
 
-type SessionUser = {
-  role?: string;
-  fullName?: string;
-  username?: string;
-};
+const ROUTES_KEY = 'school_routes';
+const BUSES_KEY = 'school_buses';
+
+function nextRouteId(routes: Route[]) {
+  const highest = routes.reduce((max, r) => {
+    const num = Number(r.id.replace(/\D/g, ''));
+    return Number.isNaN(num) ? max : Math.max(max, num);
+  }, 0);
+  return `RT${String(highest + 1).padStart(3, '0')}`;
+}
 
 const emptyForm = {
   routeName: '',
-  routeCode: '',
-  busAssigned: '',
+  places: '',
+  fare: '',
   status: 'Active' as 'Active' | 'Inactive',
-  pickupTime: '',
-  dropoffTime: '',
-  distance: '',
-  estimatedDuration: '',
-  notes: '',
 };
 
 export default function RoutesPage() {
-  const [routes, setRoutes] = useState<AppRoute[]>([]);
+  const [routes, setRoutes] = useState<Route[]>([]);
   const [buses, setBuses] = useState<Bus[]>([]);
-  const [loading, setLoading] = useState(true);
   const [role, setRole] = useState('');
-  const [search, setSearch] = useState('');
+  const [showSearchBar, setShowSearchBar] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All');
+  const searchContainerRef = useRef<HTMLDivElement | null>(null);
 
-  const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
 
-  const canManageRoutes = role === 'superior_Admin';
-  const canExportRoutes = role === 'superior_Admin' || role === 'Admin';
+  const canManage = role === 'superior_Admin';
 
   useEffect(() => {
     const session = localStorage.getItem('user');
     if (session) {
       try {
-        const user: SessionUser = JSON.parse(session);
+        const user = JSON.parse(session);
         setRole(user.role || '');
       } catch {
         setRole('');
       }
     }
 
-    async function loadData() {
-      try {
-        const [routesRes, busesRes] = await Promise.all([
-          fetch('/api/routes'),
-          fetch('/api/buses'),
-        ]);
-
-        const routesResult = await routesRes.json();
-        const busesResult = await busesRes.json();
-
-        if (routesResult.success) {
-          setRoutes(routesResult.data);
-        }
-
-        if (busesResult.success) {
-          setBuses(busesResult.data);
-        }
-      } catch (error) {
-        console.error('Failed to load routes page data:', error);
-      } finally {
-        setLoading(false);
-      }
+    try {
+      const savedRoutes = localStorage.getItem(ROUTES_KEY);
+      setRoutes(savedRoutes ? (JSON.parse(savedRoutes) as Route[]) : []);
+    } catch {
+      setRoutes([]);
     }
 
-    loadData();
+    try {
+      const savedBuses = localStorage.getItem(BUSES_KEY);
+      setBuses(savedBuses ? (JSON.parse(savedBuses) as Bus[]) : []);
+    } catch {
+      setBuses([]);
+    }
   }, []);
 
-  const busMap = useMemo(() => {
-    const map = new Map<string, Bus>();
-    buses.forEach((bus) => map.set(bus.id, bus));
+  const routeBusesMap = useMemo(() => {
+    const map = new Map<string, Bus[]>();
+    buses.forEach((bus) => {
+      const tripRouteIds = (bus.trips || []).map((t) => t.routeId).filter(Boolean) as string[];
+      const seen = new Set<string>();
+      tripRouteIds.forEach((rid) => {
+        if (!seen.has(rid)) {
+          seen.add(rid);
+          const existing = map.get(rid) || [];
+          map.set(rid, [...existing, bus]);
+        }
+      });
+    });
     return map;
   }, [buses]);
 
   const filteredRoutes = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) {
-      return routes;
-    }
-
+    const term = searchTerm.trim().toLowerCase();
     return routes.filter((route) => {
-      const bus = route.busAssigned ? busMap.get(route.busAssigned) : null;
-      return (
+      const matchesSearch =
+        term === '' ||
         route.routeName.toLowerCase().includes(term) ||
-        route.routeCode.toLowerCase().includes(term) ||
-        route.status.toLowerCase().includes(term) ||
-        (route.driverName || '').toLowerCase().includes(term) ||
-        (bus?.busNumber || '').toLowerCase().includes(term)
-      );
+        route.places.toLowerCase().includes(term) ||
+        String(route.fare).includes(term);
+      const matchesStatus = statusFilter === 'All' || route.status === statusFilter;
+      return matchesSearch && matchesStatus;
     });
-  }, [routes, search, busMap]);
+  }, [routes, searchTerm, statusFilter]);
+
+  useEffect(() => {
+    function handleClick(event: MouseEvent) {
+      if (!showSearchBar || !searchContainerRef.current) return;
+      if (!searchContainerRef.current.contains(event.target as Node)) {
+        setShowSearchBar(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showSearchBar]);
 
   const openCreate = () => {
     setEditingRouteId(null);
@@ -134,19 +132,9 @@ export default function RoutesPage() {
     setIsEditorOpen(true);
   };
 
-  const openEdit = (route: AppRoute) => {
+  const openEdit = (route: Route) => {
     setEditingRouteId(route.id);
-    setForm({
-      routeName: route.routeName,
-      routeCode: route.routeCode,
-      busAssigned: route.busAssigned || '',
-      status: route.status,
-      pickupTime: route.pickupTime,
-      dropoffTime: route.dropoffTime,
-      distance: route.distance,
-      estimatedDuration: route.estimatedDuration,
-      notes: route.notes || '',
-    });
+    setForm({ routeName: route.routeName, places: route.places, fare: String(route.fare), status: route.status });
     setIsEditorOpen(true);
   };
 
@@ -156,347 +144,297 @@ export default function RoutesPage() {
     setForm(emptyForm);
   };
 
-  const saveRoute = async () => {
-    if (!canManageRoutes) {
-      return;
-    }
+  const saveRoute = () => {
+    if (!canManage) return;
+    if (!form.routeName.trim()) { alert('Route name is required.'); return; }
+    const fareValue = Number(form.fare);
+    if (Number.isNaN(fareValue) || fareValue < 0) { alert('Please enter a valid fare amount.'); return; }
 
-    const bus = form.busAssigned ? busMap.get(form.busAssigned) : null;
-
-    const payload = {
-      actorRole: role,
-      route: {
-        routeName: form.routeName,
-        routeCode: form.routeCode,
-        busAssigned: form.busAssigned || null,
-        driverAssigned: null,
-        driverName: bus?.driverName || null,
+    let updated: Route[];
+    if (editingRouteId) {
+      updated = routes.map((r) =>
+        r.id === editingRouteId
+          ? { ...r, routeName: form.routeName.trim(), places: form.places.trim(), fare: fareValue, status: form.status }
+          : r
+      );
+    } else {
+      const newRoute: Route = {
+        id: nextRouteId(routes),
+        routeName: form.routeName.trim(),
+        places: form.places.trim(),
+        fare: fareValue,
         status: form.status,
-        pickupTime: form.pickupTime,
-        dropoffTime: form.dropoffTime,
-        distance: form.distance,
-        estimatedDuration: form.estimatedDuration,
-        notes: form.notes,
-      },
-    };
-
-    const url = editingRouteId ? `/api/routes/${editingRouteId}` : '/api/routes';
-    const method = editingRouteId ? 'PUT' : 'POST';
-
-    const response = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    const result = await response.json();
-    if (!result.success) {
-      alert(result.message || 'Failed to save route');
-      return;
+        createdAt: new Date().toISOString(),
+      };
+      updated = [...routes, newRoute];
     }
 
-    const refreshed = await fetch('/api/routes');
-    const refreshedResult = await refreshed.json();
-    if (refreshedResult.success) {
-      setRoutes(refreshedResult.data);
-    }
-
+    setRoutes(updated);
+    localStorage.setItem(ROUTES_KEY, JSON.stringify(updated));
     closeEditor();
   };
 
-  const exportAsExcel = () => {
-    const header = ['Route Code', 'Route Name', 'Bus', 'Driver', 'Pickup', 'Dropoff', 'Status', 'Distance'];
-    const rows = filteredRoutes.map((route) => {
-      const bus = route.busAssigned ? busMap.get(route.busAssigned)?.busNumber || '' : '';
-      return [
-        route.routeCode,
-        route.routeName,
-        bus,
-        route.driverName || '',
-        route.pickupTime,
-        route.dropoffTime,
-        route.status,
-        route.distance,
-      ];
-    });
-
-    const csv = [header, ...rows]
-      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-      .join('\n');
-
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'routes-export.csv';
-    link.click();
-    URL.revokeObjectURL(link.href);
-  };
-
-  const exportAsWord = () => {
-    const tableRows = filteredRoutes
-      .map((route) => {
-        const bus = route.busAssigned ? busMap.get(route.busAssigned)?.busNumber || '-' : '-';
-        return `<tr>
-          <td>${route.routeCode}</td>
-          <td>${route.routeName}</td>
-          <td>${bus}</td>
-          <td>${route.driverName || '-'}</td>
-          <td>${route.pickupTime}</td>
-          <td>${route.dropoffTime}</td>
-          <td>${route.status}</td>
-          <td>${route.distance}</td>
-        </tr>`;
-      })
-      .join('');
-
-    const html = `
-      <html>
-      <head><meta charset="utf-8"><title>Routes Export</title></head>
-      <body>
-        <h2>Routes Export</h2>
-        <table border="1" cellspacing="0" cellpadding="6">
-          <thead>
-            <tr>
-              <th>Route Code</th>
-              <th>Route Name</th>
-              <th>Bus</th>
-              <th>Driver</th>
-              <th>Pickup</th>
-              <th>Dropoff</th>
-              <th>Status</th>
-              <th>Distance</th>
-            </tr>
-          </thead>
-          <tbody>${tableRows}</tbody>
-        </table>
-      </body>
-      </html>
-    `;
-
-    const blob = new Blob([html], { type: 'application/msword' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'routes-export.doc';
-    link.click();
-    URL.revokeObjectURL(link.href);
-  };
-
-  const exportAsPdf = () => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      return;
-    }
-
-    const rows = filteredRoutes
-      .map((route) => {
-        const bus = route.busAssigned ? busMap.get(route.busAssigned)?.busNumber || '-' : '-';
-        return `<tr>
-          <td>${route.routeCode}</td>
-          <td>${route.routeName}</td>
-          <td>${bus}</td>
-          <td>${route.driverName || '-'}</td>
-          <td>${route.pickupTime}</td>
-          <td>${route.dropoffTime}</td>
-          <td>${route.status}</td>
-          <td>${route.distance}</td>
-        </tr>`;
-      })
-      .join('');
-
-    printWindow.document.write(`
-      <html>
-      <head>
-        <title>Routes PDF Export</title>
-        <style>
-          body { font-family: Arial, sans-serif; padding: 20px; }
-          table { border-collapse: collapse; width: 100%; }
-          th, td { border: 1px solid #999; padding: 8px; font-size: 12px; text-align: left; }
-          h2 { margin-bottom: 12px; }
-        </style>
-      </head>
-      <body>
-        <h2>Routes Export</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Route Code</th>
-              <th>Route Name</th>
-              <th>Bus</th>
-              <th>Driver</th>
-              <th>Pickup</th>
-              <th>Dropoff</th>
-              <th>Status</th>
-              <th>Distance</th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </body>
-      </html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
+  const deleteRoute = (routeId: string) => {
+    if (!canManage) return;
+    if (!confirm('Delete this route? Buses using it will lose the route link.')) return;
+    const updated = routes.filter((r) => r.id !== routeId);
+    setRoutes(updated);
+    localStorage.setItem(ROUTES_KEY, JSON.stringify(updated));
   };
 
   return (
-    <div className="min-h-screen bg-[#f3f2f1] dark:bg-gray-900">
-      <main className="max-w-screen-2xl mx-auto px-6 py-5">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Routes</h1>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Create, set, edit, and export route schedules</p>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 font-sans text-sm text-gray-800 dark:text-gray-100">
+      {/* Secondary module nav */}
+      <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700/50 px-4 py-3 flex items-center space-x-6 text-teal-700">
+        <Link href="/" className="hover:underline text-gray-500 dark:text-gray-400">Home</Link>
+        <Link href="/students" className="hover:underline">Students</Link>
+        <Link href="/buses" className="hover:underline">Transport Module</Link>
+        <span className="font-bold border-b-2 border-teal-700 pb-1 cursor-default">Routes</span>
+      </div>
+
+      <div className="p-6 bg-white dark:bg-transparent m-4 shadow-sm border border-gray-200 dark:border-gray-700/40">
+        {/* Header */}
+        <div className="flex justify-between items-center mb-6">
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-light text-gray-800 dark:text-gray-100">
+              Transport: <span className="font-semibold text-gray-600 dark:text-gray-300">Routes List</span>
+            </h1>
+            <div ref={searchContainerRef}>
+              {showSearchBar ? (
+                <input
+                  autoFocus
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search route name or places"
+                  className="w-80 border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowSearchBar(true)}
+                  className="inline-flex items-center justify-center w-8 h-8 rounded border border-gray-300 dark:border-gray-600 text-teal-700 hover:bg-teal-50 dark:hover:bg-teal-900/25"
+                  title="Search"
+                >
+                  <Search size={16} className="text-teal-700" />
+                </button>
+              )}
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {canManageRoutes && (
+
+          <div className="flex space-x-4">
+            <button
+              type="button"
+              onClick={() => setShowFilters((p) => !p)}
+              className="inline-flex items-center justify-center w-8 h-8 rounded border border-gray-300 dark:border-gray-600 text-teal-700 hover:bg-teal-50 dark:hover:bg-teal-900/25"
+              title="Filters"
+            >
+              <Filter size={16} className="text-teal-700" />
+            </button>
+            {canManage && (
               <button
+                type="button"
                 onClick={openCreate}
-                className="px-3 py-1.5 text-sm rounded bg-[#0078d4] hover:bg-[#106ebe] text-white"
+                className="flex items-center space-x-1 text-teal-700 hover:bg-teal-50 dark:hover:bg-teal-900/25 px-3 py-1 rounded"
               >
-                New Route
+                <Plus size={16} className="text-teal-700" /> <span>New Route</span>
               </button>
             )}
-            {canExportRoutes && (
-              <>
-                <button onClick={exportAsPdf} className="px-3 py-1.5 text-sm rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200">PDF</button>
-                <button onClick={exportAsWord} className="px-3 py-1.5 text-sm rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200">Word</button>
-                <button onClick={exportAsExcel} className="px-3 py-1.5 text-sm rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200">Excel</button>
-              </>
-            )}
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-sm overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 flex items-center justify-between gap-3">
-            <p className="text-sm text-gray-700 dark:text-gray-300">
-              Showing <span className="font-semibold">{filteredRoutes.length}</span> of <span className="font-semibold">{routes.length}</span> routes
-            </p>
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search route code, name, status, bus, driver"
-              className="w-full max-w-md px-3 py-2 text-sm rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-            />
-          </div>
-
-          {loading ? (
-            <div className="p-8 text-sm text-gray-600 dark:text-gray-300">Loading routes...</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-700">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-200">Code</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-200">Route Name</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-200">Bus</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-200">Driver</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-200">Pickup</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-200">Dropoff</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-200">Distance</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-200">Status</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-200">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {filteredRoutes.map((route) => {
-                    const bus = route.busAssigned ? busMap.get(route.busAssigned) : null;
-                    return (
-                      <tr key={route.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/40">
-                        <td className="px-4 py-3 text-gray-900 dark:text-gray-100">{route.routeCode}</td>
-                        <td className="px-4 py-3 text-gray-900 dark:text-gray-100">{route.routeName}</td>
-                        <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{bus?.busNumber || '-'}</td>
-                        <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{route.driverName || '-'}</td>
-                        <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{route.pickupTime}</td>
-                        <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{route.dropoffTime}</td>
-                        <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{route.distance}</td>
-                        <td className="px-4 py-3">
-                          <span className={`inline-flex px-2 py-1 rounded text-xs font-medium ${route.status === 'Active' ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300' : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200'}`}>
-                            {route.status}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          {canManageRoutes ? (
-                            <button
-                              onClick={() => openEdit(route)}
-                              className="px-2.5 py-1 text-xs rounded bg-[#0078d4] hover:bg-[#106ebe] text-white"
-                            >
-                              Edit
-                            </button>
-                          ) : (
-                            <span className="text-xs text-gray-500 dark:text-gray-400">Read-only</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </main>
-
-      {isEditorOpen && canManageRoutes && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-          <div className="w-full max-w-2xl bg-white dark:bg-gray-800 rounded shadow-lg border border-gray-200 dark:border-gray-700">
-            <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-              <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-                {editingRouteId ? 'Edit Route' : 'Create Route'}
-              </h2>
-              <button onClick={closeEditor} className="text-sm text-gray-600 dark:text-gray-300">Close</button>
-            </div>
-
-            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+        {/* Filter panel */}
+        {showFilters && (
+          <div className="mb-4 p-4 border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-transparent">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Route Name</label>
-                <input value={form.routeName} onChange={(e) => setForm((p) => ({ ...p, routeName: e.target.value }))} className="w-full px-2.5 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Route Code</label>
-                <input value={form.routeCode} onChange={(e) => setForm((p) => ({ ...p, routeCode: e.target.value }))} className="w-full px-2.5 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Assigned Bus</label>
-                <select value={form.busAssigned} onChange={(e) => setForm((p) => ({ ...p, busAssigned: e.target.value }))} className="w-full px-2.5 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
-                  <option value="">None</option>
-                  {buses.map((bus) => (
-                    <option key={bus.id} value={bus.id}>{bus.busNumber}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Status</label>
-                <select value={form.status} onChange={(e) => setForm((p) => ({ ...p, status: e.target.value as 'Active' | 'Inactive' }))} className="w-full px-2.5 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+                <label className="block text-gray-500 dark:text-gray-400 mb-1">Status</label>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+                >
+                  <option value="All">All</option>
                   <option value="Active">Active</option>
                   <option value="Inactive">Inactive</option>
                 </select>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Stats row */}
+        <div className="flex items-center justify-between mb-3 text-xs text-gray-500 dark:text-gray-400">
+          <span>
+            Showing <span className="font-semibold text-gray-700 dark:text-gray-300">{filteredRoutes.length}</span> of{' '}
+            <span className="font-semibold text-gray-700 dark:text-gray-300">{routes.length}</span> routes
+          </span>
+        </div>
+
+        {/* Table */}
+        <div className="overflow-x-auto border border-gray-200 dark:border-gray-700/30 rounded-sm">
+          <table className="min-w-full">
+            <thead>
+              <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-700">
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-200 uppercase text-xs tracking-wide">Route Name</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-200 uppercase text-xs tracking-wide">Places / Stops</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-200 uppercase text-xs tracking-wide">Fare (KES)</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-200 uppercase text-xs tracking-wide">Buses</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-200 uppercase text-xs tracking-wide">Status</th>
+                {canManage && (
+                  <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-200 uppercase text-xs tracking-wide">Actions</th>
+                )}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 dark:divide-gray-700/50">
+              {filteredRoutes.length === 0 ? (
+                <tr>
+                  <td colSpan={canManage ? 6 : 5} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                    {routes.length === 0 ? 'No routes created yet.' : 'No routes match your search.'}
+                  </td>
+                </tr>
+              ) : (
+                filteredRoutes.map((route, idx) => {
+                  const routeBuses = routeBusesMap.get(route.id) || [];
+                  return (
+                    <tr
+                      key={route.id}
+                      className={`transition-colors dark:hover:bg-teal-900/25 hover:bg-teal-50/60 ${idx % 2 === 1 ? 'bg-gray-50/60 dark:bg-white/2' : ''}`}
+                    >
+                      <td className="px-4 py-3 font-medium text-teal-700 dark:text-teal-400">{route.routeName}</td>
+                      <td className="px-4 py-3 text-gray-700 dark:text-gray-300 max-w-xs">
+                        <span className="line-clamp-2">{route.places || '-'}</span>
+                      </td>
+                      <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
+                        {route.fare > 0 ? route.fare.toLocaleString() : '-'}
+                      </td>
+                      <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
+                        {routeBuses.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {routeBuses.map((bus) => (
+                              <span key={bus.id} className="inline-flex px-2 py-0.5 rounded text-xs bg-teal-100 dark:bg-teal-900/40 text-teal-800 dark:text-teal-300">
+                                {bus.name || bus.id}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 dark:text-gray-600">No buses yet</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex px-2 py-1 rounded text-xs font-medium ${
+                            route.status === 'Active'
+                              ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300'
+                              : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200'
+                          }`}
+                        >
+                          {route.status}
+                        </span>
+                      </td>
+                      {canManage && (
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => openEdit(route)}
+                              className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded text-teal-700 hover:bg-teal-50 dark:hover:bg-teal-900/30 border border-teal-200 dark:border-teal-800"
+                            >
+                              <Pencil size={12} /> Edit
+                            </button>
+                            <button
+                              onClick={() => deleteRoute(route.id)}
+                              className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 border border-red-200 dark:border-red-900/40"
+                            >
+                              <X size={12} /> Delete
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Create / Edit modal */}
+      {isEditorOpen && canManage && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+          <div className="w-full max-w-lg bg-white dark:bg-gray-800 rounded shadow-lg border border-gray-200 dark:border-gray-700">
+            <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+                {editingRouteId ? 'Edit Route' : 'Create Route'}
+              </h2>
+              <button onClick={closeEditor} className="text-gray-500 hover:text-gray-800 dark:hover:text-gray-200">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
               <div>
-                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Pickup Time</label>
-                <input value={form.pickupTime} onChange={(e) => setForm((p) => ({ ...p, pickupTime: e.target.value }))} className="w-full px-2.5 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" />
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                  Route Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  value={form.routeName}
+                  onChange={(e) => setForm((p) => ({ ...p, routeName: e.target.value }))}
+                  placeholder="e.g. Kiserian Route"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:border-teal-500"
+                />
               </div>
+
               <div>
-                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Dropoff Time</label>
-                <input value={form.dropoffTime} onChange={(e) => setForm((p) => ({ ...p, dropoffTime: e.target.value }))} className="w-full px-2.5 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" />
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Places / Stops</label>
+                <textarea
+                  value={form.places}
+                  onChange={(e) => setForm((p) => ({ ...p, places: e.target.value }))}
+                  placeholder="e.g. Kiserian Stage, Corner Baridi, Rongai Town, Langata Road, Upper Hill"
+                  rows={3}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:border-teal-500"
+                />
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Distance</label>
-                <input value={form.distance} onChange={(e) => setForm((p) => ({ ...p, distance: e.target.value }))} className="w-full px-2.5 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Estimated Duration</label>
-                <input value={form.estimatedDuration} onChange={(e) => setForm((p) => ({ ...p, estimatedDuration: e.target.value }))} className="w-full px-2.5 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Notes</label>
-                <textarea value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} rows={3} className="w-full px-2.5 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" />
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Fare (KES)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="50"
+                    value={form.fare}
+                    onChange={(e) => setForm((p) => ({ ...p, fare: e.target.value }))}
+                    placeholder="e.g. 3500"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:border-teal-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Status</label>
+                  <select
+                    value={form.status}
+                    onChange={(e) => setForm((p) => ({ ...p, status: e.target.value as 'Active' | 'Inactive' }))}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:border-teal-500"
+                  >
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                  </select>
+                </div>
               </div>
             </div>
 
             <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
-              <button onClick={closeEditor} className="px-3 py-1.5 text-sm rounded border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200">Cancel</button>
-              <button onClick={saveRoute} className="px-3 py-1.5 text-sm rounded bg-[#0078d4] hover:bg-[#106ebe] text-white">Save Route</button>
+              <button
+                onClick={closeEditor}
+                className="px-3 py-1.5 text-sm rounded border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveRoute}
+                className="px-3 py-1.5 text-sm rounded bg-teal-700 hover:bg-teal-800 text-white"
+              >
+                {editingRouteId ? 'Save Changes' : 'Create Route'}
+              </button>
             </div>
           </div>
         </div>

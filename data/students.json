@@ -10,8 +10,8 @@
     "parentName": "Grace Wanjiku",
     "parentContact": "+254722001001",
     "address": "Ruaka, Kiambu",
-    "busAssigned": "bus_001",
-    "routeAssigned": "route_001",
+    "busAssigned": "BS001",
+    "routeAssigned": "RT001",
     "enrollmentDate": "2025-01-10",
     "isActive": true
   },
@@ -682,8 +682,8 @@
     "parentName": "Christine Wanjala",
     "parentContact": "+254722001043",
     "address": "Kilimani",
-    "busAssigned": "bus_001",
-    "routeAssigned": "route_001",
+    "busAssigned": "BS003",
+    "routeAssigned": "RT001",
     "enrollmentDate": "2020-01-20",
     "isActive": true
   },

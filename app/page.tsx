@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 
 export default function Home() {
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [userName, setUserName] = useState('USER');
+  const [userRole, setUserRole] = useState('');
   const [isMounted, setIsMounted] = useState(false);
   const [stats, setStats] = useState({
     totalStudents: 0,
@@ -14,8 +15,13 @@ export default function Home() {
   });
 
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
-    return () => clearInterval(timer);
+    const update = () => setCurrentTime(new Date());
+    const init = setTimeout(update, 0);
+    const timer = setInterval(update, 60000);
+    return () => {
+      clearTimeout(init);
+      clearInterval(timer);
+    };
   }, []);
 
   // Client-side initialization - runs after component mounts
@@ -28,6 +34,7 @@ export default function Home() {
         try {
           const user = JSON.parse(userData);
           setUserName(user.fullName || user.username);
+          setUserRole(user.role || '');
         } catch (err) {
           console.error('Error parsing user data:', err);
         }
@@ -63,16 +70,28 @@ export default function Home() {
   }, [isMounted]);
 
   const getGreeting = () => {
+    if (!currentTime) return 'Good day';
     const hour = currentTime.getHours();
     if (hour < 12) return 'Good morning';
     if (hour < 17) return 'Good afternoon';
     return 'Good evening';
   };
 
+  const canAddBusFromHome = userRole === 'Admin' || userRole === 'superior_Admin';
+  const canSeeApprovals = userRole === 'superior_Admin';
+
   return (
-    <div className="min-h-screen bg-[#f5f5f5] dark:bg-gray-900">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 font-sans text-sm text-gray-800">
+      {/* Secondary module nav */}
+      <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700/50 px-4 py-3 flex items-center space-x-6 text-teal-700">
+        <span className="font-bold border-b-2 border-teal-700 pb-1 cursor-default">Home</span>
+        <Link href="/students" className="hover:underline">Students</Link>
+        <Link href="/buses" className="hover:underline">Transport Module</Link>
+        <Link href="/routes" className="hover:underline">Routes</Link>
+      </div>
+
       {/* Main Content Area */}
-      <main className="max-w-[1600px] mx-auto px-6 py-6">
+      <main className="px-6 py-6">
         {/* Page Title */}
         <div className="mb-6">
           <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">
@@ -162,20 +181,22 @@ export default function Home() {
             Quick Actions
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <Link
-                href="/buses/add"
-                className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-sm p-4 hover:border-[#0078d4] hover:shadow-md transition-all group"
-              >
-                <div className="flex flex-col items-center text-center">
-                  <div className="w-12 h-12 bg-[#0078d4]/10 dark:bg-[#0078d4]/20 rounded-full flex items-center justify-center mb-3 group-hover:bg-[#0078d4] transition-colors">
-                    <svg className="w-6 h-6 text-[#0078d4] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
+              {canAddBusFromHome && (
+                <Link
+                  href="/buses/add"
+                  className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-sm p-4 hover:border-[#0078d4] hover:shadow-md transition-all group"
+                >
+                  <div className="flex flex-col items-center text-center">
+                    <div className="w-12 h-12 bg-[#0078d4]/10 dark:bg-[#0078d4]/20 rounded-full flex items-center justify-center mb-3 group-hover:bg-[#0078d4] transition-colors">
+                      <svg className="w-6 h-6 text-[#0078d4] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                    </div>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">Add Bus</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Register new</p>
                   </div>
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">Add Bus</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Register new</p>
-                </div>
-              </Link>
+                </Link>
+              )}
 
               <Link
                 href="/students"
@@ -221,6 +242,23 @@ export default function Home() {
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">View all</p>
                 </div>
               </Link>
+
+              {canSeeApprovals && (
+                <Link
+                  href="/approvals"
+                  className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-sm p-4 hover:border-[#0078d4] hover:shadow-md transition-all group"
+                >
+                  <div className="flex flex-col items-center text-center">
+                    <div className="w-12 h-12 bg-[#0078d4]/10 dark:bg-[#0078d4]/20 rounded-full flex items-center justify-center mb-3 group-hover:bg-[#0078d4] transition-colors">
+                      <svg className="w-6 h-6 text-[#0078d4] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">Approvals</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Pending actions</p>
+                  </div>
+                </Link>
+              )}
           </div>
         </div>
 
@@ -233,7 +271,7 @@ export default function Home() {
             <div className="divide-y divide-gray-200 dark:divide-gray-700">
               <div className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer">
                 <div className="flex gap-3">
-                  <div className="flex-shrink-0">
+                  <div className="shrink-0">
                     <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
                       <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -249,7 +287,7 @@ export default function Home() {
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">2 hours ago</p>
                   </div>
-                  <div className="flex-shrink-0">
+                  <div className="shrink-0">
                     <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                     </svg>
@@ -259,7 +297,7 @@ export default function Home() {
 
               <div className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer">
                 <div className="flex gap-3">
-                  <div className="flex-shrink-0">
+                  <div className="shrink-0">
                     <div className="w-8 h-8 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
                       <svg className="w-4 h-4 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -275,7 +313,7 @@ export default function Home() {
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">5 hours ago</p>
                   </div>
-                  <div className="flex-shrink-0">
+                  <div className="shrink-0">
                     <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                     </svg>
@@ -285,7 +323,7 @@ export default function Home() {
 
               <div className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer">
                 <div className="flex gap-3">
-                  <div className="flex-shrink-0">
+                  <div className="shrink-0">
                     <div className="w-8 h-8 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center">
                       <svg className="w-4 h-4 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
@@ -301,7 +339,7 @@ export default function Home() {
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">1 day ago</p>
                   </div>
-                  <div className="flex-shrink-0">
+                  <div className="shrink-0">
                     <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                     </svg>
@@ -321,7 +359,7 @@ export default function Home() {
 
       {/* Footer */}
       <footer className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 mt-8">
-        <div className="max-w-[1600px] mx-auto px-6 py-4">
+        <div className="px-6 py-4">
           <p className="text-center text-xs text-gray-500 dark:text-gray-400">
             © 2026 School Transport Management System. All rights reserved.
           </p>

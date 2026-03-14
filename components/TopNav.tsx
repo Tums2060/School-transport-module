@@ -55,23 +55,25 @@ export default function TopNav() {
 
   return (
     <header className="bg-[#002050] dark:bg-gray-950 text-white shadow-lg">
-      <div className="max-w-screen-2xl mx-auto px-6 py-3">
+      <div className="px-6 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-6">
             <Link href="/" className="text-xl font-semibold tracking-tight hover:text-blue-200">
-              COMPANY
+              ZANABUNI
             </Link>
             <span className="text-sm text-gray-300">Transport Management</span>
           </div>
 
           <div className="flex items-center gap-4">
             <span className="text-xs text-gray-300">
-              {now.toLocaleDateString('en-US', {
-                weekday: 'short',
-                month: 'short',
-                day: 'numeric',
-                year: 'numeric',
-              })}
+              {isMounted
+                ? now.toLocaleDateString('en-US', {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })
+                : ''}
             </span>
 
             {isMounted && (

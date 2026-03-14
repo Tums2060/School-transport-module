@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Search, Plus, Download, ArrowDown, Pencil, Trash2, Check, X, Filter } from 'lucide-react';
 
 type RouteDetails = {
@@ -10,6 +11,13 @@ type RouteDetails = {
   majorStops: string;
   destination: string;
   notes: string;
+};
+
+type AppRoute = {
+  id: string;
+  routeName: string;
+  places: string;
+  status?: string;
 };
 
 type DriverDetails = {
@@ -27,6 +35,7 @@ type Trip = {
   time: string;
   students: Student[];
   routeDetails: RouteDetails;
+  routeId?: string;
 };
 
 type Bus = {
@@ -41,6 +50,7 @@ type Bus = {
 type TripFormData = {
   time: string;
   routeDetails: RouteDetails;
+  routeId?: string;
 };
 
 type BusFormData = {
@@ -55,6 +65,7 @@ type BusFormData = {
 type TabKey = 'general' | 'trips' | 'driver';
 
 const STORAGE_KEY = 'school_buses';
+const ROUTES_KEY = 'school_routes';
 
 const emptyRouteDetails: RouteDetails = {
   area: '',
@@ -188,7 +199,7 @@ function parseTimeValue(value: string) {
 }
 
 function routeSummary(routeDetails: RouteDetails) {
-  return [routeDetails.area, routeDetails.majorStops, routeDetails.destination].map((v) => v.trim()).filter(Boolean).join(' - ');
+  return [routeDetails.pickupPoints, routeDetails.notes].map((v) => v.trim()).filter(Boolean).join(' - ');
 }
 
 function normalizeStudents(rawStudents: unknown): Student[] {
@@ -231,6 +242,7 @@ function normalizeBus(rawBus: Record<string, unknown>): Bus {
         time: typeof t.time === 'string' ? parseTimeValue(t.time) : '',
         students: normalizeStudents(t.students),
         routeDetails: normalizeRouteDetails(t.routeDetails, legacyRoute),
+        routeId: typeof t.routeId === 'string' ? t.routeId : undefined,
       };
     });
   } else {
@@ -279,8 +291,9 @@ function createFormData(bus: Bus): BusFormData {
         ? bus.trips.map((trip) => ({
             time: trip.time,
             routeDetails: { ...trip.routeDetails },
+            routeId: trip.routeId,
           }))
-        : [{ time: '', routeDetails: { ...emptyRouteDetails } }],
+        : [{ time: '', routeDetails: { ...emptyRouteDetails }, routeId: undefined }],
   };
 }
 
@@ -311,24 +324,12 @@ function validateBusForm(formData: BusFormData) {
       errors.push(`${label}: time is required.`);
     }
 
-    if (!trip.routeDetails.area.trim()) {
-      errors.push(`${label}: route area is required.`);
+    if (!trip.routeId) {
+      errors.push(`${label}: route is required.`);
     }
 
     if (!trip.routeDetails.pickupPoints.trim()) {
       errors.push(`${label}: pickup points are required.`);
-    }
-
-    if (!trip.routeDetails.majorStops.trim()) {
-      errors.push(`${label}: major stops are required.`);
-    }
-
-    if (!trip.routeDetails.destination.trim()) {
-      errors.push(`${label}: destination is required.`);
-    }
-
-    if (!trip.routeDetails.notes.trim()) {
-      errors.push(`${label}: route notes are required.`);
     }
   });
 
@@ -340,6 +341,7 @@ function validateBusForm(formData: BusFormData) {
 }
 
 export default function BusesListPage() {
+  const router = useRouter();
   const [buses, setBuses] = useState<Bus[]>(initialBuses);
   const [isDownloading, setIsDownloading] = useState(false);
   const [showSearchBar, setShowSearchBar] = useState(false);
@@ -358,6 +360,41 @@ export default function BusesListPage() {
   const [newStudentAdmission, setNewStudentAdmission] = useState('');
   const [newStudentName, setNewStudentName] = useState('');
   const [deletingBusId, setDeletingBusId] = useState<string | null>(null);
+  const [showTripOverviewModal, setShowTripOverviewModal] = useState(false);
+  const [selectedBusForTripsId, setSelectedBusForTripsId] = useState<string | null>(null);
+  const [appRoutes, setAppRoutes] = useState<AppRoute[]>([]);
+  const [role, setRole] = useState('');
+
+  const canManage = role === 'superior_Admin';
+
+  useEffect(() => {
+    const session = localStorage.getItem('user');
+    if (session) {
+      try {
+        const user = JSON.parse(session);
+        setRole(user.role || '');
+      } catch {
+        setRole('');
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      const savedRoutes = localStorage.getItem(ROUTES_KEY);
+      setAppRoutes(savedRoutes ? (JSON.parse(savedRoutes) as AppRoute[]) : []);
+    } catch {
+      setAppRoutes([]);
+    }
+  }, []);
+
+  const routeNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    appRoutes.forEach((route) => {
+      map.set(route.id, route.routeName);
+    });
+    return map;
+  }, [appRoutes]);
 
   useEffect(() => {
     try {
@@ -444,6 +481,31 @@ export default function BusesListPage() {
     });
   };
 
+  const handleTripRouteIdChange = (index: number, value: string) => {
+    const selectedRoute = appRoutes.find((route) => route.id === value);
+    const pickupPoints = selectedRoute?.places || '';
+
+    setEditFormData((current) => {
+      if (!current) return current;
+      const nextTrips = current.trips.map((trip, tripIndex) =>
+        tripIndex === index
+          ? {
+              ...trip,
+              routeId: value || undefined,
+              routeDetails: {
+                ...trip.routeDetails,
+                area: '',
+                pickupPoints,
+                majorStops: '',
+                destination: '',
+              },
+            }
+          : trip
+      );
+      return { ...current, trips: nextTrips };
+    });
+  };
+
   const handleTripRouteChange = (index: number, field: keyof RouteDetails, value: string) => {
     setEditFormData((current) => {
       if (!current) return current;
@@ -459,7 +521,7 @@ export default function BusesListPage() {
       current
         ? {
             ...current,
-            trips: [...current.trips, { time: '', routeDetails: { ...emptyRouteDetails } }],
+            trips: [...current.trips, { time: '', routeDetails: { ...emptyRouteDetails }, routeId: undefined }],
           }
         : current
     );
@@ -469,7 +531,7 @@ export default function BusesListPage() {
     setEditFormData((current) => {
       if (!current) return current;
       if (current.trips.length === 1) {
-        return { ...current, trips: [{ time: '', routeDetails: { ...emptyRouteDetails } }] };
+        return { ...current, trips: [{ time: '', routeDetails: { ...emptyRouteDetails }, routeId: undefined }] };
       }
       return { ...current, trips: current.trips.filter((_, tripIndex) => tripIndex !== index) };
     });
@@ -492,11 +554,12 @@ export default function BusesListPage() {
     const normalizedTrips = editFormData.trips
       .map((trip) => ({
         time: parseTimeValue(trip.time),
+        routeId: trip.routeId,
         routeDetails: {
-          area: trip.routeDetails.area.trim(),
+          area: '',
           pickupPoints: trip.routeDetails.pickupPoints.trim(),
-          majorStops: trip.routeDetails.majorStops.trim(),
-          destination: trip.routeDetails.destination.trim(),
+          majorStops: '',
+          destination: '',
           notes: trip.routeDetails.notes.trim(),
         },
       }))
@@ -510,6 +573,7 @@ export default function BusesListPage() {
         time: trip.time,
         students: oldTrip?.students || [],
         routeDetails: trip.routeDetails,
+        routeId: trip.routeId || oldTrip?.routeId,
       };
     });
 
@@ -535,6 +599,20 @@ export default function BusesListPage() {
     setSelectedBusId(bus.id);
     setSelectedTripNumber(bus.trips[0]?.tripNumber ?? null);
     setShowLearnersModal(true);
+  };
+
+  const openTripOverviewModal = (bus: Bus) => {
+    setSelectedBusForTripsId(bus.id);
+    setShowTripOverviewModal(true);
+  };
+
+  const closeTripOverviewModal = () => {
+    setShowTripOverviewModal(false);
+    setSelectedBusForTripsId(null);
+  };
+
+  const openTripStudentsPage = (busId: string, tripNumber: number) => {
+    router.push(`/buses/${busId}/trips/${tripNumber}`);
   };
 
   const closeLearnersModal = () => {
@@ -656,6 +734,10 @@ export default function BusesListPage() {
   };
 
   const selectedBus = useMemo(() => buses.find((bus) => bus.id === selectedBusId), [buses, selectedBusId]);
+  const selectedBusForTrips = useMemo(
+    () => buses.find((bus) => bus.id === selectedBusForTripsId),
+    [buses, selectedBusForTripsId]
+  );
   const selectedTrip = useMemo(
     () => selectedBus?.trips.find((trip) => trip.tripNumber === selectedTripNumber),
     [selectedBus, selectedTripNumber]
@@ -705,11 +787,10 @@ export default function BusesListPage() {
     <div className="min-h-screen bg-gray-50 font-sans text-sm text-gray-800">
       {/* Secondary module nav - combined from both branches */}
       <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700/50 px-4 py-3 flex items-center space-x-6 text-teal-700">
-        <span className="font-bold text-gray-800 dark:text-gray-100">SCHOOL SYSTEM</span>
+        <Link href="/" className="hover:underline text-gray-500 dark:text-gray-400">Home</Link>
         <Link href="/students" className="hover:underline">Students</Link>
         <span className="font-bold border-b-2 border-teal-700 pb-1 cursor-default">Transport Module</span>
         <Link href="/routes" className="hover:underline">Routes</Link>
-        <Link href="/" className="hover:underline text-gray-500 dark:text-gray-400">← Dashboard</Link>
       </div>
 
       <div className="p-6 bg-white dark:bg-transparent m-4 shadow-sm border border-gray-200 dark:border-gray-700/40">
@@ -747,9 +828,6 @@ export default function BusesListPage() {
             >
               <Filter size={16} className="text-teal-700" />
             </button>
-            <Link href="/buses/add" className="flex items-center space-x-1 text-teal-700 hover:bg-teal-50 px-3 py-1 rounded">
-              <Plus size={16} className="text-teal-700" /> <span>New</span>
-            </Link>
             <button
               type="button"
               onClick={handleDownloadReport}
@@ -825,12 +903,15 @@ export default function BusesListPage() {
             <tbody>
               {filteredBuses.map((bus, index) => (
                 <tr key={bus.id} className={`border-b border-gray-100 dark:border-gray-700/30 hover:bg-teal-50 dark:hover:bg-teal-900/25 transition-colors ${index % 2 === 0 ? 'bg-white dark:bg-transparent' : 'bg-gray-50/50 dark:bg-white/2'}`}>
-                  <td className="py-2 px-4 text-teal-700 font-medium cursor-pointer hover:underline" onClick={() => openEditModal(bus)}>{bus.id}</td>
+                  <td className="py-2 px-4 text-teal-700 font-medium cursor-pointer hover:underline" onClick={() => openTripOverviewModal(bus)}>{bus.id}</td>
                   <td className="py-2 px-4">{bus.name}</td>
                   <td className="py-2 px-4 text-xs text-gray-600">
                     {bus.trips.length > 0
                       ? bus.trips.map((trip) => (
-                          <div key={trip.tripNumber}>Trip {trip.tripNumber}: {routeSummary(trip.routeDetails) || 'Not set'}</div>
+                          <div key={trip.tripNumber}>
+                            Trip {trip.tripNumber}: {routeNameById.get(trip.routeId || '') || 'No route'}
+                            {trip.routeDetails.pickupPoints ? ` - ${trip.routeDetails.pickupPoints}` : ''}
+                          </div>
                         ))
                       : 'No routes'}
                   </td>
@@ -845,15 +926,23 @@ export default function BusesListPage() {
                   <td className="py-2 px-4 text-right">{bus.capacity}</td>
                   <td className="py-2 px-4">{bus.status}</td>
                   <td className="py-2 px-4 text-right space-x-1 flex justify-end">
-                    <button type="button" onClick={() => openEditModal(bus)} className="inline-flex items-center justify-center text-teal-700 hover:bg-teal-50 rounded p-2">
-                      <Pencil size={16} className="text-teal-700" />
-                    </button>
-                    <button type="button" onClick={() => openLearnersModal(bus)} className="inline-flex items-center justify-center text-blue-600 hover:bg-blue-50 rounded p-2">
-                      <Plus size={16} className="text-blue-600" />
-                    </button>
-                    <button type="button" onClick={() => handleDeleteBus(bus.id)} className="inline-flex items-center justify-center text-red-600 hover:bg-red-50 rounded p-2">
-                      <Trash2 size={16} className="text-red-600" />
-                    </button>
+                    {canManage ? (
+                      <>
+                        <button type="button" onClick={() => openEditModal(bus)} className="inline-flex items-center justify-center text-teal-700 hover:bg-teal-50 rounded p-2">
+                          <Pencil size={16} className="text-teal-700" />
+                        </button>
+                        <button type="button" onClick={() => openLearnersModal(bus)} className="inline-flex items-center justify-center text-blue-600 hover:bg-blue-50 rounded p-2">
+                          <Plus size={16} className="text-blue-600" />
+                        </button>
+                        <button type="button" onClick={() => handleDeleteBus(bus.id)} className="inline-flex items-center justify-center text-red-600 hover:bg-red-50 rounded p-2">
+                          <Trash2 size={16} className="text-red-600" />
+                        </button>
+                      </>
+                    ) : (
+                      <button type="button" onClick={() => openLearnersModal(bus)} className="inline-flex items-center justify-center text-blue-600 hover:bg-blue-50 rounded p-2">
+                        <Plus size={16} className="text-blue-600" />
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -935,30 +1024,31 @@ export default function BusesListPage() {
                         </button>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-2 gap-x-8 gap-y-4">
                         <div className="flex items-center">
                           <label className="w-1/3 text-gray-500">Time</label>
                           <input type="time" value={trip.time} onChange={(event) => handleTripTimeChange(index, event.target.value)} className="w-2/3 border border-gray-300 rounded px-2 py-1" />
                         </div>
                         <div className="flex items-center">
-                          <label className="w-1/3 text-gray-500">Area</label>
-                          <input type="text" value={trip.routeDetails.area} onChange={(event) => handleTripRouteChange(index, 'area', event.target.value)} className="w-2/3 border border-gray-300 rounded px-2 py-1" />
+                          <label className="w-1/3 text-gray-500">Route</label>
+                          <select
+                            value={trip.routeId || ''}
+                            onChange={(event) => handleTripRouteIdChange(index, event.target.value)}
+                            className="w-2/3 border border-gray-300 rounded px-2 py-1 bg-white"
+                          >
+                            <option value="">— Select route —</option>
+                            {appRoutes.map((route) => (
+                              <option key={route.id} value={route.id}>{route.routeName}</option>
+                            ))}
+                          </select>
                         </div>
                         <div className="col-span-2 flex items-start">
                           <label className="w-1/6 text-gray-500 pt-1">Pickup Points</label>
-                          <textarea value={trip.routeDetails.pickupPoints} onChange={(event) => handleTripRouteChange(index, 'pickupPoints', event.target.value)} className="w-5/6 border border-gray-300 rounded px-2 py-1 min-h-20" />
+                          <textarea value={trip.routeDetails.pickupPoints} readOnly className="w-5/6 border border-gray-200 rounded px-2 py-1 min-h-20 bg-gray-50 text-gray-600" />
                         </div>
                         <div className="col-span-2 flex items-start">
-                          <label className="w-1/6 text-gray-500 pt-1">Major Stops</label>
-                          <textarea value={trip.routeDetails.majorStops} onChange={(event) => handleTripRouteChange(index, 'majorStops', event.target.value)} className="w-5/6 border border-gray-300 rounded px-2 py-1 min-h-20" />
-                        </div>
-                        <div className="flex items-center">
-                          <label className="w-1/3 text-gray-500">Destination</label>
-                          <input type="text" value={trip.routeDetails.destination} onChange={(event) => handleTripRouteChange(index, 'destination', event.target.value)} className="w-2/3 border border-gray-300 rounded px-2 py-1" />
-                        </div>
-                        <div className="flex items-start">
-                          <label className="w-1/3 text-gray-500 pt-1">Notes</label>
-                          <textarea value={trip.routeDetails.notes} onChange={(event) => handleTripRouteChange(index, 'notes', event.target.value)} className="w-2/3 border border-gray-300 rounded px-2 py-1 min-h-20" />
+                          <label className="w-1/6 text-gray-500 pt-1">Route Notes</label>
+                          <textarea value={trip.routeDetails.notes} onChange={(event) => handleTripRouteChange(index, 'notes', event.target.value)} className="w-5/6 border border-gray-300 rounded px-2 py-1 min-h-20" />
                         </div>
                       </div>
                     </div>
@@ -986,6 +1076,50 @@ export default function BusesListPage() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showTripOverviewModal && selectedBusForTrips && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="w-full max-w-3xl max-h-[85vh] overflow-hidden bg-white shadow-sm border border-gray-200 rounded">
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+              <h2 className="text-2xl font-light text-gray-800">Bus {selectedBusForTrips.id}: Trips Overview</h2>
+              <button type="button" onClick={closeTripOverviewModal} className="text-gray-500 hover:text-gray-800"><X size={20} /></button>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[calc(85vh-9rem)]">
+              <p className="text-sm text-gray-600 mb-4">Click a trip to open the student list page for that specific bus trip.</p>
+              <div className="space-y-3">
+                {selectedBusForTrips.trips.map((trip) => (
+                  <div key={trip.tripNumber} className="border border-gray-200 rounded p-4 flex items-center justify-between">
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => openTripStudentsPage(selectedBusForTrips.id, trip.tripNumber)}
+                        className="text-teal-700 font-semibold hover:underline"
+                      >
+                        Trip {trip.tripNumber}
+                      </button>
+                      <p className="text-sm text-gray-600">{formatTimeLabel(trip.time)}</p>
+                      <p className="text-xs text-gray-500">Students: {trip.students.length}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => downloadLearnersPDF(selectedBusForTrips, trip)}
+                      disabled={trip.students.length === 0}
+                      className="px-3 py-1.5 rounded bg-teal-700 hover:bg-teal-800 text-white disabled:bg-gray-400 flex items-center gap-2"
+                    >
+                      <Download size={14} /> Print Trip Details
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex justify-end border-t border-gray-200 px-6 py-4 bg-gray-50">
+              <button type="button" onClick={closeTripOverviewModal} className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded font-medium">Close</button>
             </div>
           </div>
         </div>

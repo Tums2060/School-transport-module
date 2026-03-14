@@ -161,11 +161,10 @@ export default function StudentsPage() {
     <div className="min-h-screen bg-gray-50 font-sans text-sm text-gray-800">
       {/* Secondary module nav */}
       <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700/50 px-4 py-3 flex items-center space-x-6 text-teal-700">
-        <span className="font-bold text-gray-800 dark:text-gray-100">SCHOOL SYSTEM</span>
+        <Link href="/" className="hover:underline text-gray-500 dark:text-gray-400">Home</Link>
         <span className="font-bold border-b-2 border-teal-700 pb-1 cursor-default">Students</span>
         <Link href="/buses" className="hover:underline">Transport Module</Link>
         <Link href="/routes" className="hover:underline">Routes</Link>
-        <Link href="/" className="hover:underline text-gray-500 dark:text-gray-400">← Dashboard</Link>
       </div>
       <div className="flex">
         {showFilters && (

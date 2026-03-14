@@ -1,9 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Check, Plus, Trash2 } from 'lucide-react';
+
+type AppRoute = {
+  id: string;
+  routeName: string;
+  places: string;
+  status?: string;
+};
 
 type RouteDetails = {
   area: string;
@@ -28,6 +35,7 @@ type Trip = {
   time: string;
   students: Student[];
   routeDetails: RouteDetails;
+  routeId?: string;
 };
 
 type Bus = {
@@ -42,6 +50,7 @@ type Bus = {
 type TripFormData = {
   time: string;
   routeDetails: RouteDetails;
+  routeId: string;
 };
 
 type FormData = {
@@ -64,6 +73,8 @@ const emptyRouteDetails: RouteDetails = {
   notes: '',
 };
 
+const ROUTES_KEY = 'school_routes';
+
 const emptyFormData: FormData = {
   name: '',
   capacity: '',
@@ -76,6 +87,7 @@ const emptyFormData: FormData = {
     {
       time: '08:00',
       routeDetails: { ...emptyRouteDetails },
+      routeId: '',
     },
   ],
 };
@@ -190,6 +202,61 @@ export default function AddBusPage() {
   const [activeTab, setActiveTab] = useState<TabKey>('general');
   const [errors, setErrors] = useState<string[]>([]);
   const [formData, setFormData] = useState<FormData>(emptyFormData);
+  const [appRoutes, setAppRoutes] = useState<AppRoute[]>([]);
+  const [role, setRole] = useState('');
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      const session = localStorage.getItem('user');
+      if (session) {
+        try {
+          const user = JSON.parse(session);
+          setRole(user.role || '');
+        } catch {
+          setRole('');
+        }
+      }
+      try {
+        const savedRoutes = localStorage.getItem(ROUTES_KEY);
+        setAppRoutes(savedRoutes ? (JSON.parse(savedRoutes) as AppRoute[]) : []);
+      } catch {
+        setAppRoutes([]);
+      }
+      setIsMounted(true);
+    });
+  }, []);
+
+  // Redirect non-superior_Admin after mount
+  useEffect(() => {
+    if (isMounted && role !== '' && role !== 'superior_Admin') {
+      router.replace('/buses');
+    }
+  }, [isMounted, role, router]);
+
+  const handleTripRouteIdChange = (index: number, value: string) => {
+    const selectedRoute = appRoutes.find((route) => route.id === value);
+    const pickupPoints = selectedRoute?.places || '';
+
+    setFormData((current) => ({
+      ...current,
+      trips: current.trips.map((trip, tripIndex) =>
+        tripIndex === index
+          ? {
+              ...trip,
+              routeId: value,
+              routeDetails: {
+                ...trip.routeDetails,
+                pickupPoints,
+                area: '',
+                majorStops: '',
+                destination: '',
+              },
+            }
+          : trip
+      ),
+    }));
+  };
 
   const handleChange = (name: 'name' | 'capacity' | 'status', value: string) => {
     setFormData((current) => ({ ...current, [name]: value }));
@@ -232,7 +299,7 @@ export default function AddBusPage() {
   const handleAddTripSlot = () => {
     setFormData((current) => ({
       ...current,
-      trips: [...current.trips, { time: '', routeDetails: { ...emptyRouteDetails } }],
+      trips: [...current.trips, { time: '', routeDetails: { ...emptyRouteDetails }, routeId: '' }],
     }));
   };
 
@@ -241,7 +308,7 @@ export default function AddBusPage() {
       ...current,
       trips:
         current.trips.length === 1
-          ? [{ time: '', routeDetails: { ...emptyRouteDetails } }]
+          ? [{ time: '', routeDetails: { ...emptyRouteDetails }, routeId: '' }]
           : current.trips.filter((_, tripIndex) => tripIndex !== index),
     }));
   };
@@ -280,24 +347,12 @@ export default function AddBusPage() {
         nextErrors.push(`${tripLabel}: time is required.`);
       }
 
-      if (!trip.routeDetails.area.trim()) {
-        nextErrors.push(`${tripLabel}: route area is required.`);
+      if (!trip.routeId) {
+        nextErrors.push(`${tripLabel}: route is required.`);
       }
 
       if (!trip.routeDetails.pickupPoints.trim()) {
         nextErrors.push(`${tripLabel}: pickup points are required.`);
-      }
-
-      if (!trip.routeDetails.majorStops.trim()) {
-        nextErrors.push(`${tripLabel}: major stops are required.`);
-      }
-
-      if (!trip.routeDetails.destination.trim()) {
-        nextErrors.push(`${tripLabel}: destination is required.`);
-      }
-
-      if (!trip.routeDetails.notes.trim()) {
-        nextErrors.push(`${tripLabel}: route notes are required.`);
       }
     });
 
@@ -334,11 +389,12 @@ export default function AddBusPage() {
     const normalizedTrips = formData.trips
       .map((trip) => ({
         time: parseTimeValue(trip.time),
+        routeId: trip.routeId || undefined,
         routeDetails: {
-          area: trip.routeDetails.area.trim(),
+          area: '',
           pickupPoints: trip.routeDetails.pickupPoints.trim(),
-          majorStops: trip.routeDetails.majorStops.trim(),
-          destination: trip.routeDetails.destination.trim(),
+          majorStops: '',
+          destination: '',
           notes: trip.routeDetails.notes.trim(),
         },
       }))
@@ -350,6 +406,7 @@ export default function AddBusPage() {
       time: trip.time,
       students: [],
       routeDetails: trip.routeDetails,
+      routeId: trip.routeId,
     }));
 
     const newBus: Bus = {
@@ -368,6 +425,18 @@ export default function AddBusPage() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedBuses));
     router.push('/buses');
   };
+
+  if (!isMounted) {
+    return (
+      <div className="min-h-screen bg-gray-50 font-sans text-sm flex items-center justify-center">
+        <span className="text-gray-500">Loading...</span>
+      </div>
+    );
+  }
+
+  if (role !== 'superior_Admin') {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-sm text-gray-800">
@@ -508,49 +577,34 @@ export default function AddBusPage() {
                       </div>
 
                       <div className="flex items-center">
-                        <label className="w-1/3 text-gray-500">Route Area</label>
-                        <input
-                          type="text"
-                          value={trip.routeDetails.area}
-                          onChange={(event) => handleTripRouteChange(index, 'area', event.target.value)}
-                          className="w-2/3 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-teal-500"
-                        />
+                        <label className="w-1/3 text-gray-500">Route</label>
+                        <select
+                          value={trip.routeId}
+                          onChange={(event) => handleTripRouteIdChange(index, event.target.value)}
+                          className="w-2/3 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-teal-500 bg-white"
+                        >
+                          <option value="">— Select route —</option>
+                          {appRoutes.map((r) => (
+                            <option key={r.id} value={r.id}>{r.routeName}</option>
+                          ))}
+                        </select>
                       </div>
 
                       <div className="col-span-2 flex items-start">
                         <label className="w-1/6 text-gray-500 pt-1">Pickup Points</label>
                         <textarea
                           value={trip.routeDetails.pickupPoints}
-                          onChange={(event) => handleTripRouteChange(index, 'pickupPoints', event.target.value)}
-                          className="w-5/6 border border-gray-300 rounded px-2 py-1 min-h-24 focus:outline-none focus:border-teal-500"
+                          readOnly
+                          className="w-5/6 border border-gray-200 rounded px-2 py-1 min-h-20 bg-gray-50 text-gray-600"
                         />
                       </div>
 
                       <div className="col-span-2 flex items-start">
-                        <label className="w-1/6 text-gray-500 pt-1">Major Stops</label>
-                        <textarea
-                          value={trip.routeDetails.majorStops}
-                          onChange={(event) => handleTripRouteChange(index, 'majorStops', event.target.value)}
-                          className="w-5/6 border border-gray-300 rounded px-2 py-1 min-h-24 focus:outline-none focus:border-teal-500"
-                        />
-                      </div>
-
-                      <div className="flex items-center">
-                        <label className="w-1/3 text-gray-500">Destination</label>
-                        <input
-                          type="text"
-                          value={trip.routeDetails.destination}
-                          onChange={(event) => handleTripRouteChange(index, 'destination', event.target.value)}
-                          className="w-2/3 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-teal-500"
-                        />
-                      </div>
-
-                      <div className="flex items-start">
-                        <label className="w-1/3 text-gray-500 pt-1">Route Notes</label>
+                        <label className="w-1/6 text-gray-500 pt-1">Route Notes</label>
                         <textarea
                           value={trip.routeDetails.notes}
                           onChange={(event) => handleTripRouteChange(index, 'notes', event.target.value)}
-                          className="w-2/3 border border-gray-300 rounded px-2 py-1 min-h-24 focus:outline-none focus:border-teal-500"
+                          className="w-5/6 border border-gray-300 rounded px-2 py-1 min-h-20 focus:outline-none focus:border-teal-500"
                         />
                       </div>
                     </div>

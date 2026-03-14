@@ -271,10 +271,9 @@ export default function SearchBusesPage() {
     <div className="min-h-screen bg-gray-50 font-sans text-sm text-gray-800 flex flex-col">
       {/* Breadcrumb nav within buses section */}
       <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center space-x-6 text-teal-700 shrink-0">
-        <span className="font-bold text-gray-800">SCHOOL SYSTEM</span>
+        <Link href="/" className="hover:underline text-gray-500">Home</Link>
         <Link href="/buses" className="hover:underline">Buses List</Link>
         <span className="font-bold border-b-2 border-teal-700 pb-1 cursor-default">Search &amp; Filter</span>
-        <Link href="/" className="hover:underline text-gray-500 ml-auto">← Dashboard</Link>
       </div>
 
       <div className="flex flex-1 overflow-hidden">

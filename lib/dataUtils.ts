@@ -37,7 +37,7 @@ export interface User {
   id: string;
   username: string;
   password: string;
-  role: 'superior_Admin' | 'Admin' | 'Bus_Driver';
+  role: 'superior_Admin' | 'Admin' | 'Bus_Driver' | 'Finance_Manager';
   fullName: string;
   email: string;
   phone: string;
@@ -182,6 +182,18 @@ export async function getStudentById(id: string): Promise<Student | null> {
 export async function getActiveStudentsCount(): Promise<number> {
   const students = await getStudents();
   return students.filter(s => s.isActive === true).length;
+}
+
+/**
+ * Update a student record by id (partial update)
+ */
+export async function updateStudent(id: string, patch: Partial<Student>): Promise<Student | null> {
+  const students = await getStudents();
+  const index = students.findIndex(s => s.id === id);
+  if (index === -1) return null;
+  students[index] = { ...students[index], ...patch };
+  await writeData<Student[]>('students.json', students);
+  return students[index];
 }
 
 /**
