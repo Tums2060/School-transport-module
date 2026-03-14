@@ -9,7 +9,8 @@ type Route = {
   id: string;
   routeName: string;
   places: string;
-  fare: number;
+  oneWayFare: number;
+  twoWayFare: number;
   status: 'Active' | 'Inactive';
   createdAt: string;
 };
@@ -27,7 +28,8 @@ function nextRouteId(routes: Route[]) {
 const emptyForm = {
   routeName: '',
   places: '',
-  fare: '',
+  oneWayFare: '',
+  twoWayFare: '',
   status: 'Active' as 'Active' | 'Inactive',
 };
 
@@ -63,8 +65,10 @@ export default function AddRoutePage() {
   const validate = () => {
     const next: string[] = [];
     if (!form.routeName.trim()) next.push('Route name is required.');
-    const fare = Number(form.fare);
-    if (form.fare !== '' && (Number.isNaN(fare) || fare < 0)) next.push('Fare must be a positive number.');
+    const oneWayFare = Number(form.oneWayFare);
+    const twoWayFare = Number(form.twoWayFare);
+    if (form.oneWayFare !== '' && (Number.isNaN(oneWayFare) || oneWayFare < 0)) next.push('One-way fare must be a positive number.');
+    if (form.twoWayFare !== '' && (Number.isNaN(twoWayFare) || twoWayFare < 0)) next.push('Two-way fare must be a positive number.');
     setErrors(next);
     return next.length === 0;
   };
@@ -84,7 +88,8 @@ export default function AddRoutePage() {
       id: nextRouteId(routes),
       routeName: form.routeName.trim(),
       places: form.places.trim(),
-      fare: form.fare !== '' ? Number(form.fare) : 0,
+      oneWayFare: form.oneWayFare !== '' ? Number(form.oneWayFare) : 0,
+      twoWayFare: form.twoWayFare !== '' ? Number(form.twoWayFare) : 0,
       status: form.status,
       createdAt: new Date().toISOString(),
     };
@@ -186,18 +191,32 @@ export default function AddRoutePage() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-3 gap-6">
             <div>
               <label className="block text-gray-500 dark:text-gray-400 mb-1 font-medium">
-                Fare (KES)
+                One Way Fare (KES)
               </label>
               <input
                 type="number"
                 min="0"
                 step="50"
-                value={form.fare}
-                onChange={(e) => setForm((p) => ({ ...p, fare: e.target.value }))}
+                value={form.oneWayFare}
+                onChange={(e) => setForm((p) => ({ ...p, oneWayFare: e.target.value }))}
                 placeholder="e.g. 3500"
+                className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-none focus:border-teal-500 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+              />
+            </div>
+            <div>
+              <label className="block text-gray-500 dark:text-gray-400 mb-1 font-medium">
+                Two Way Fare (KES)
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="50"
+                value={form.twoWayFare}
+                onChange={(e) => setForm((p) => ({ ...p, twoWayFare: e.target.value }))}
+                placeholder="e.g. 7000"
                 className="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-none focus:border-teal-500 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
               />
             </div>

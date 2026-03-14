@@ -3,6 +3,18 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 
+type ActivityItem = {
+  id: string;
+  title: string;
+  description: string;
+  type: 'approval' | 'route' | 'transport';
+  createdAt: string;
+};
+
+const ACTIVITY_KEY = 'system_recent_activity';
+const BUSES_KEY = 'school_buses';
+const ROUTES_KEY = 'school_routes';
+
 export default function Home() {
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [userName, setUserName] = useState('USER');
@@ -12,7 +24,10 @@ export default function Home() {
     totalStudents: 0,
     totalBuses: 0,
     activeBuses: 0,
+    totalRoutes: 0,
+    activeRoutes: 0,
   });
+  const [recentActivities, setRecentActivities] = useState<ActivityItem[]>([]);
 
   useEffect(() => {
     const update = () => setCurrentTime(new Date());
@@ -45,19 +60,49 @@ export default function Home() {
     });
   }, []);
 
-  // Fetch stats from API
+  // Fetch students count from API and sync transport counts from localStorage
   useEffect(() => {
+    function loadTransportStats() {
+      try {
+        const busesRaw = localStorage.getItem(BUSES_KEY);
+        const routesRaw = localStorage.getItem(ROUTES_KEY);
+
+        const buses = busesRaw ? (JSON.parse(busesRaw) as Array<{ status?: string }>) : [];
+        const routes = routesRaw ? (JSON.parse(routesRaw) as Array<{ status?: string }>) : [];
+
+        const totalBuses = buses.length;
+        const activeBuses = buses.filter((bus) => (bus.status || '').toLowerCase() === 'active').length;
+        const totalRoutes = routes.length;
+        const activeRoutes = routes.filter((route) => (route.status || '').toLowerCase() === 'active').length;
+
+        setStats((prev) => ({
+          ...prev,
+          totalBuses,
+          activeBuses,
+          totalRoutes,
+          activeRoutes,
+        }));
+      } catch {
+        setStats((prev) => ({
+          ...prev,
+          totalBuses: 0,
+          activeBuses: 0,
+          totalRoutes: 0,
+          activeRoutes: 0,
+        }));
+      }
+    }
+
     async function fetchStats() {
       try {
         const response = await fetch('/api/stats');
         const result = await response.json();
         
         if (result.success) {
-          setStats({
+          setStats((prev) => ({
+            ...prev,
             totalStudents: result.data.students,
-            totalBuses: result.data.buses,
-            activeBuses: result.data.buses, // Counting only active buses
-          });
+          }));
         }
       } catch (error) {
         console.error('Error fetching stats:', error);
@@ -66,7 +111,50 @@ export default function Home() {
 
     if (isMounted) {
       fetchStats();
+      loadTransportStats();
+
+      const onStorage = (event: StorageEvent) => {
+        if (event.key === BUSES_KEY || event.key === ROUTES_KEY) {
+          loadTransportStats();
+        }
+      };
+
+      window.addEventListener('storage', onStorage);
+      const interval = setInterval(loadTransportStats, 5000);
+
+      return () => {
+        window.removeEventListener('storage', onStorage);
+        clearInterval(interval);
+      };
     }
+  }, [isMounted]);
+
+  useEffect(() => {
+    function loadActivities() {
+      try {
+        const saved = localStorage.getItem(ACTIVITY_KEY);
+        const parsed = saved ? (JSON.parse(saved) as ActivityItem[]) : [];
+        setRecentActivities(parsed.slice(0, 8));
+      } catch {
+        setRecentActivities([]);
+      }
+    }
+
+    if (!isMounted) return;
+    loadActivities();
+
+    function onStorage(event: StorageEvent) {
+      if (event.key === ACTIVITY_KEY) {
+        loadActivities();
+      }
+    }
+
+    window.addEventListener('storage', onStorage);
+    const interval = setInterval(loadActivities, 5000);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      clearInterval(interval);
+    };
   }, [isMounted]);
 
   const getGreeting = () => {
@@ -79,6 +167,25 @@ export default function Home() {
 
   const canAddBusFromHome = userRole === 'Admin' || userRole === 'superior_Admin';
   const canSeeApprovals = userRole === 'superior_Admin';
+
+  const getActivityIcon = (type: ActivityItem['type']) => {
+    if (type === 'approval') return 'bg-green-100 text-green-600';
+    if (type === 'route') return 'bg-purple-100 text-purple-600';
+    return 'bg-blue-100 text-blue-600';
+  };
+
+  const getRelativeTime = (value: string) => {
+    const now = currentTime ? currentTime.getTime() : 0;
+    const then = new Date(value).getTime();
+    const diff = Math.max(0, now - then);
+    const minutes = Math.floor(diff / 60000);
+    if (minutes < 1) return 'just now';
+    if (minutes < 60) return `${minutes} min ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+    const days = Math.floor(hours / 24);
+    return `${days} day${days === 1 ? '' : 's'} ago`;
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 font-sans text-sm text-gray-800">
@@ -159,10 +266,10 @@ export default function Home() {
                   Active Routes
                 </p>
                 <p className="text-3xl font-semibold text-gray-900 dark:text-white mb-1">
-                  3
+                  {stats.activeRoutes}
                 </p>
                 <p className="text-xs text-blue-600 dark:text-blue-400">
-                  All on schedule
+                  of {stats.totalRoutes} total routes
                 </p>
               </div>
               <div className="p-2.5 bg-purple-50 dark:bg-purple-900/20 rounded">
@@ -269,89 +376,28 @@ export default function Home() {
           </h3>
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-sm">
             <div className="divide-y divide-gray-200 dark:divide-gray-700">
-              <div className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer">
-                <div className="flex gap-3">
-                  <div className="shrink-0">
-                    <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
-                      <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
+              {recentActivities.length === 0 ? (
+                <div className="p-4 text-sm text-gray-500 dark:text-gray-400">No recent updates yet.</div>
+              ) : (
+                recentActivities.map((activity) => (
+                  <div key={activity.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                    <div className="flex gap-3">
+                      <div className="shrink-0">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${getActivityIcon(activity.type)}`}>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">{activity.title}</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">{activity.description}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">{getRelativeTime(activity.createdAt)}</p>
+                      </div>
                     </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">
-                      New student registered
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-                      Amani Wanjiku added to Foundation Red stream
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">2 hours ago</p>
-                  </div>
-                  <div className="shrink-0">
-                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer">
-                <div className="flex gap-3">
-                  <div className="shrink-0">
-                    <div className="w-8 h-8 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
-                      <svg className="w-4 h-4 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </div>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">
-                      Bus maintenance completed
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-                      Bus KCD (B-004) servicing completed and ready for operation
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">5 hours ago</p>
-                  </div>
-                  <div className="shrink-0">
-                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer">
-                <div className="flex gap-3">
-                  <div className="shrink-0">
-                    <div className="w-8 h-8 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center">
-                      <svg className="w-4 h-4 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-                      </svg>
-                    </div>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">
-                      Route schedule updated
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-                      North Route (NR-001) pickup time adjusted to 06:30 AM
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">1 day ago</p>
-                  </div>
-                  <div className="shrink-0">
-                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-3 text-center border-t border-gray-200 dark:border-gray-700">
-                <button className="text-sm text-[#0078d4] dark:text-blue-400 hover:underline font-medium">
-                  View all activities
-                </button>
-              </div>
+                ))
+              )}
             </div>
           </div>
         </div>

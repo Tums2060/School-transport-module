@@ -64,7 +64,19 @@ type BusFormData = {
 
 type TabKey = 'general' | 'trips' | 'driver';
 
+type ApprovalRecord = {
+  admissionNumber: string;
+  fullName: string;
+  routeId: string;
+  busId: string;
+  tripType: '' | 'one_way' | 'two_way';
+  direction: '' | 'morning' | 'evening';
+  usingBus: boolean;
+  status: 'pending' | 'approved';
+};
+
 const STORAGE_KEY = 'school_buses';
+const APPROVALS_KEY = 'student_transport_approvals';
 const ROUTES_KEY = 'school_routes';
 
 const emptyRouteDetails: RouteDetails = {
@@ -198,6 +210,18 @@ function parseTimeValue(value: string) {
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
 }
 
+function isMorning(time: string): boolean {
+  const [hourText] = time.split(':');
+  const hour = Number(hourText);
+  return !Number.isNaN(hour) && hour >= 5 && hour < 12;
+}
+
+function isEvening(time: string): boolean {
+  const [hourText] = time.split(':');
+  const hour = Number(hourText);
+  return !Number.isNaN(hour) && hour >= 12 && hour <= 18;
+}
+
 function routeSummary(routeDetails: RouteDetails) {
   return [routeDetails.pickupPoints, routeDetails.notes].map((v) => v.trim()).filter(Boolean).join(' - ');
 }
@@ -277,6 +301,60 @@ function normalizeBus(rawBus: Record<string, unknown>): Bus {
     },
     trips,
   };
+}
+
+function matchesApprovedTrip(trip: Trip, approval: ApprovalRecord): boolean {
+  if (approval.routeId && trip.routeId !== approval.routeId) {
+    return false;
+  }
+  if (approval.tripType === 'two_way') {
+    return isMorning(trip.time) || isEvening(trip.time);
+  }
+  if (approval.tripType === 'one_way' && approval.direction === 'morning') {
+    return isMorning(trip.time);
+  }
+  if (approval.tripType === 'one_way' && approval.direction === 'evening') {
+    return isEvening(trip.time);
+  }
+  return false;
+}
+
+function syncBusesWithApprovedStudents(inputBuses: Bus[]): Bus[] {
+  let approvals: ApprovalRecord[] = [];
+  try {
+    approvals = JSON.parse(localStorage.getItem(APPROVALS_KEY) || '[]') as ApprovalRecord[];
+  } catch {
+    approvals = [];
+  }
+
+  const approved = approvals.filter((approval) => approval.status === 'approved');
+
+  const cleared = inputBuses.map((bus) => ({
+    ...bus,
+    trips: bus.trips.map((trip) => ({ ...trip, students: [] })),
+  }));
+
+  return cleared.map((bus) => {
+    const busApprovals = approved.filter((approval) => approval.usingBus && approval.busId === bus.id);
+    if (busApprovals.length === 0) {
+      return bus;
+    }
+
+    return {
+      ...bus,
+      trips: bus.trips.map((trip) => {
+        const students = busApprovals
+          .filter((approval) => matchesApprovedTrip(trip, approval))
+          .map((approval) => ({ admissionNumber: approval.admissionNumber, name: approval.fullName }));
+
+        const deduped = students.filter(
+          (student, index, list) => list.findIndex((entry) => entry.admissionNumber === student.admissionNumber) === index
+        );
+
+        return { ...trip, students: deduped };
+      }),
+    };
+  });
 }
 
 function createFormData(bus: Bus): BusFormData {
@@ -401,11 +479,13 @@ export default function BusesListPage() {
       const saved = localStorage.getItem(STORAGE_KEY);
       const parsed = saved ? (JSON.parse(saved) as Record<string, unknown>[]) : initialBuses;
       const normalized = parsed.map((bus) => normalizeBus(bus));
-      setBuses(normalized);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+      const synced = syncBusesWithApprovedStudents(normalized);
+      setBuses(synced);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(synced));
     } catch {
-      setBuses(initialBuses);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(initialBuses));
+      const syncedFallback = syncBusesWithApprovedStudents(initialBuses);
+      setBuses(syncedFallback);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(syncedFallback));
     }
   }, []);
 
@@ -595,12 +675,6 @@ export default function BusesListPage() {
     closeEditModal();
   };
 
-  const openLearnersModal = (bus: Bus) => {
-    setSelectedBusId(bus.id);
-    setSelectedTripNumber(bus.trips[0]?.tripNumber ?? null);
-    setShowLearnersModal(true);
-  };
-
   const openTripOverviewModal = (bus: Bus) => {
     setSelectedBusForTripsId(bus.id);
     setShowTripOverviewModal(true);
@@ -613,70 +687,6 @@ export default function BusesListPage() {
 
   const openTripStudentsPage = (busId: string, tripNumber: number) => {
     router.push(`/buses/${busId}/trips/${tripNumber}`);
-  };
-
-  const closeLearnersModal = () => {
-    setShowLearnersModal(false);
-    setSelectedBusId(null);
-    setSelectedTripNumber(null);
-    setNewStudentAdmission('');
-    setNewStudentName('');
-  };
-
-  const addStudent = () => {
-    if (!selectedBusId || selectedTripNumber === null || !newStudentAdmission.trim() || !newStudentName.trim()) {
-      return;
-    }
-
-    const updatedBuses = buses.map((bus) => {
-      if (bus.id !== selectedBusId) {
-        return bus;
-      }
-
-      return {
-        ...bus,
-        trips: bus.trips.map((trip) =>
-          trip.tripNumber === selectedTripNumber
-            ? {
-                ...trip,
-                students: [...trip.students, { admissionNumber: newStudentAdmission.trim(), name: newStudentName.trim() }],
-              }
-            : trip
-        ),
-      };
-    });
-
-    setBuses(updatedBuses);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedBuses));
-    setNewStudentAdmission('');
-    setNewStudentName('');
-  };
-
-  const removeStudent = (admissionNumber: string) => {
-    if (!selectedBusId || selectedTripNumber === null) {
-      return;
-    }
-
-    const updatedBuses = buses.map((bus) => {
-      if (bus.id !== selectedBusId) {
-        return bus;
-      }
-
-      return {
-        ...bus,
-        trips: bus.trips.map((trip) =>
-          trip.tripNumber === selectedTripNumber
-            ? {
-                ...trip,
-                students: trip.students.filter((student) => student.admissionNumber !== admissionNumber),
-              }
-            : trip
-        ),
-      };
-    });
-
-    setBuses(updatedBuses);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedBuses));
   };
 
   const downloadLearnersPDF = async (bus: Bus, trip: Trip) => {
@@ -733,14 +743,9 @@ export default function BusesListPage() {
     setDeletingBusId(null);
   };
 
-  const selectedBus = useMemo(() => buses.find((bus) => bus.id === selectedBusId), [buses, selectedBusId]);
   const selectedBusForTrips = useMemo(
     () => buses.find((bus) => bus.id === selectedBusForTripsId),
     [buses, selectedBusForTripsId]
-  );
-  const selectedTrip = useMemo(
-    () => selectedBus?.trips.find((trip) => trip.tripNumber === selectedTripNumber),
-    [selectedBus, selectedTripNumber]
   );
 
   const filteredBuses = useMemo(() => {
@@ -931,17 +936,12 @@ export default function BusesListPage() {
                         <button type="button" onClick={() => openEditModal(bus)} className="inline-flex items-center justify-center text-teal-700 hover:bg-teal-50 rounded p-2">
                           <Pencil size={16} className="text-teal-700" />
                         </button>
-                        <button type="button" onClick={() => openLearnersModal(bus)} className="inline-flex items-center justify-center text-blue-600 hover:bg-blue-50 rounded p-2">
-                          <Plus size={16} className="text-blue-600" />
-                        </button>
                         <button type="button" onClick={() => handleDeleteBus(bus.id)} className="inline-flex items-center justify-center text-red-600 hover:bg-red-50 rounded p-2">
                           <Trash2 size={16} className="text-red-600" />
                         </button>
                       </>
                     ) : (
-                      <button type="button" onClick={() => openLearnersModal(bus)} className="inline-flex items-center justify-center text-blue-600 hover:bg-blue-50 rounded p-2">
-                        <Plus size={16} className="text-blue-600" />
-                      </button>
+                      <span className="text-xs text-gray-400">View only</span>
                     )}
                   </td>
                 </tr>
@@ -1120,108 +1120,6 @@ export default function BusesListPage() {
 
             <div className="flex justify-end border-t border-gray-200 px-6 py-4 bg-gray-50">
               <button type="button" onClick={closeTripOverviewModal} className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded font-medium">Close</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showLearnersModal && selectedBus && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="w-full max-w-4xl max-h-[90vh] overflow-hidden bg-white shadow-sm border border-gray-200 rounded">
-            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-              <h2 className="text-2xl font-light text-gray-800">Manage Trips: {selectedBus.name}</h2>
-              <button type="button" onClick={closeLearnersModal} className="text-gray-500 hover:text-gray-800"><X size={20} /></button>
-            </div>
-
-            <div className="p-6 overflow-y-auto max-h-[calc(90vh-12rem)]">
-              <div className="mb-6 pb-6 border-b border-gray-200">
-                <h3 className="font-semibold text-gray-800 mb-4">Select a Trip</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {selectedBus.trips.map((trip) => (
-                    <button
-                      key={trip.tripNumber}
-                      type="button"
-                      onClick={() => setSelectedTripNumber(trip.tripNumber)}
-                      className={`p-3 rounded border-2 text-left ${selectedTripNumber === trip.tripNumber ? 'border-teal-700 bg-teal-50' : 'border-gray-200 hover:border-teal-700'}`}
-                    >
-                      <div className="font-semibold text-gray-800">Trip {trip.tripNumber}</div>
-                      <div className="text-sm text-gray-600">{formatTimeLabel(trip.time)}</div>
-                      <div className="text-xs text-gray-500 mt-1">{trip.students.length} students</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {selectedTrip ? (
-                <div>
-                  <div className="mb-3 text-sm text-gray-700">
-                    <span className="font-semibold">Route:</span> {routeSummary(selectedTrip.routeDetails) || 'Not set'}
-                  </div>
-
-                  <div className="mb-6 pb-6 border-b border-gray-200">
-                    <h3 className="font-semibold text-gray-800 mb-4">Trip {selectedTrip.tripNumber} - {formatTimeLabel(selectedTrip.time)}</h3>
-                    <div className="flex gap-3">
-                      <input type="text" placeholder="Admission Number" value={newStudentAdmission} onChange={(event) => setNewStudentAdmission(event.target.value)} className="flex-1 border border-gray-300 rounded px-3 py-2" />
-                      <input type="text" placeholder="Student Name" value={newStudentName} onChange={(event) => setNewStudentName(event.target.value)} className="flex-1 border border-gray-300 rounded px-3 py-2" />
-                      <button type="button" onClick={addStudent} className="bg-teal-700 hover:bg-teal-800 text-white px-4 py-2 rounded font-medium flex items-center gap-2">
-                        <Plus size={16} /> Add
-                      </button>
-                    </div>
-                  </div>
-
-                  {selectedTrip.students.length > selectedBus.capacity && (
-                    <div className="mb-4 p-4 bg-red-50 border-l-4 border-red-500 rounded">
-                      <h4 className="font-semibold text-red-800">Warning</h4>
-                      <p className="text-sm text-red-700 mt-1">
-                        This trip has {selectedTrip.students.length} students but the bus capacity is {selectedBus.capacity}.
-                      </p>
-                    </div>
-                  )}
-
-                  {selectedTrip.students.length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse text-sm">
-                        <thead>
-                          <tr className="text-gray-500 border-b-2 border-gray-200 bg-gray-50">
-                            <th className="font-normal py-2 px-3">Admission Number</th>
-                            <th className="font-normal py-2 px-3">Student Name</th>
-                            <th className="font-normal py-2 px-3 text-right">Action</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {selectedTrip.students.map((student, index) => (
-                            <tr key={`${student.admissionNumber}-${index}`} className={`border-b border-gray-100 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
-                              <td className="py-2 px-3 font-mono text-teal-700">{student.admissionNumber}</td>
-                              <td className="py-2 px-3">{student.name}</td>
-                              <td className="py-2 px-3 text-right">
-                                <button type="button" onClick={() => removeStudent(student.admissionNumber)} className="inline-flex items-center justify-center text-red-600 hover:bg-red-50 rounded p-1">
-                                  <Trash2 size={14} className="text-red-600" />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="text-center py-8 text-gray-400">No students added to this trip.</div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-gray-400">Select a trip to manage students.</div>
-              )}
-            </div>
-
-            <div className="flex items-center justify-between border-t border-gray-200 px-6 py-4 bg-gray-50">
-              <button
-                type="button"
-                onClick={() => selectedTrip && downloadLearnersPDF(selectedBus, selectedTrip)}
-                disabled={!selectedTrip || selectedTrip.students.length === 0}
-                className="bg-teal-700 hover:bg-teal-800 disabled:bg-gray-400 text-white px-4 py-2 rounded font-medium flex items-center gap-2"
-              >
-                <Download size={16} /> Download Trip Roster PDF
-              </button>
-              <button type="button" onClick={closeLearnersModal} className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded font-medium">Close</button>
             </div>
           </div>
         </div>

@@ -53,6 +53,50 @@ const BUSES_KEY = 'school_buses';
 const ROUTES_KEY = 'school_routes';
 const APPROVALS_KEY = 'student_transport_approvals';
 
+function normalizeRoute(item: Record<string, unknown>): AppRoute {
+  return {
+    id: String(item.id || item.routeCode || ''),
+    routeName: String(item.routeName || item.routeCode || 'Unnamed Route'),
+    places: String(item.places || (Array.isArray(item.stops) ? item.stops.join(', ') : '')),
+    status: typeof item.status === 'string' ? item.status : undefined,
+  };
+}
+
+function normalizeBus(item: Record<string, unknown>): BusData {
+  const rawTrips = Array.isArray(item.trips) ? item.trips : [];
+  const fallbackTimes = Array.isArray(item.departureTimes) ? item.departureTimes : [];
+
+  const trips: BusTrip[] = (rawTrips.length > 0
+    ? rawTrips.map((trip, index) => {
+        const t = trip as Record<string, unknown>;
+        return {
+          tripNumber: typeof t.tripNumber === 'number' ? t.tripNumber : index + 1,
+          time: String(t.time || ''),
+          routeId: typeof t.routeId === 'string' ? t.routeId : undefined,
+        };
+      })
+    : fallbackTimes.map((time, index) => ({
+        tripNumber: index + 1,
+        time: String(time || ''),
+        routeId: undefined,
+      }))) as BusTrip[];
+
+  return {
+    id: String(item.id || item.busNumber || ''),
+    name: String(item.name || item.busNumber || 'Unnamed Bus'),
+    status: String(item.status || 'Active'),
+    trips: trips.filter((trip) => trip.time),
+  };
+}
+
+function mergeById<T extends { id: string }>(items: T[]): T[] {
+  const map = new Map<string, T>();
+  items.forEach((item) => {
+    if (item.id) map.set(item.id, item);
+  });
+  return Array.from(map.values());
+}
+
 function parseHour(time: string): number {
   return parseInt(time.split(':')[0], 10);
 }
@@ -88,7 +132,7 @@ function getEligibleBuses(
 ): Array<{ bus: BusData; coverage: { morning: boolean; evening: boolean } }> {
   if (!routeId || !tripType) return [];
 
-  return buses
+  const routeSpecific = buses
     .map((bus) => ({ bus, coverage: busRouteCoverage(bus, routeId) }))
     .filter(({ coverage }) => {
       if (tripType === 'two_way') return coverage.morning && coverage.evening;
@@ -96,6 +140,31 @@ function getEligibleBuses(
       if (tripType === 'one_way' && direction === 'evening') return coverage.evening;
       return false;
     });
+
+  if (routeSpecific.length > 0) {
+    return routeSpecific;
+  }
+
+  // Fallback for legacy buses whose trips do not have routeId configured.
+  const fallback = buses
+    .map((bus) => {
+      const trips = bus.trips || [];
+      return {
+        bus,
+        coverage: {
+          morning: trips.some((trip) => isMorning(trip.time)),
+          evening: trips.some((trip) => isEvening(trip.time)),
+        },
+      };
+    })
+    .filter(({ coverage }) => {
+      if (tripType === 'two_way') return coverage.morning && coverage.evening;
+      if (tripType === 'one_way' && direction === 'morning') return coverage.morning;
+      if (tripType === 'one_way' && direction === 'evening') return coverage.evening;
+      return false;
+    });
+
+  return fallback;
 }
 
 function Switch({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
@@ -134,24 +203,12 @@ function StudentDetailModal({ student, routes, buses, onClose, onSaved }: ModalP
     address: student.address,
   });
 
-  const [transport, setTransport] = useState<TransportAssignment>(() => {
-    try {
-      const saved = localStorage.getItem(TRANSPORT_KEY);
-      if (saved) {
-        const all = JSON.parse(saved) as Record<string, TransportAssignment>;
-        if (all[student.id]) return all[student.id];
-      }
-    } catch {
-      // ignore parse errors
-    }
-
-    return {
-      usingBus: !!student.busAssigned,
-      routeId: student.routeAssigned || '',
-      tripType: '',
-      direction: '',
-      busId: student.busAssigned || '',
-    };
+  const [transport, setTransport] = useState<TransportAssignment>({
+    usingBus: false,
+    routeId: '',
+    tripType: '',
+    direction: '',
+    busId: '',
   });
 
   const [saving, setSaving] = useState(false);
@@ -437,13 +494,56 @@ export default function FinancePage() {
   }, []);
 
   useEffect(() => {
-    try {
-      setRoutes(JSON.parse(localStorage.getItem(ROUTES_KEY) || '[]'));
-      setBuses(JSON.parse(localStorage.getItem(BUSES_KEY) || '[]'));
-    } catch {
-      setRoutes([]);
-      setBuses([]);
+    async function loadTransportData() {
+      let localRoutes: AppRoute[] = [];
+      let localBuses: BusData[] = [];
+
+      try {
+        const parsed = JSON.parse(localStorage.getItem(ROUTES_KEY) || '[]') as Array<Record<string, unknown>>;
+        localRoutes = parsed.map(normalizeRoute);
+      } catch {
+        localRoutes = [];
+      }
+
+      try {
+        const parsed = JSON.parse(localStorage.getItem(BUSES_KEY) || '[]') as Array<Record<string, unknown>>;
+        localBuses = parsed.map(normalizeBus);
+      } catch {
+        localBuses = [];
+      }
+
+      let apiBuses: BusData[] = [];
+
+      try {
+        const busesRes = await fetch('/api/buses');
+        const busesData = await busesRes.json();
+        if (busesData.success && Array.isArray(busesData.data)) {
+          apiBuses = (busesData.data as Array<Record<string, unknown>>).map(normalizeBus);
+        }
+      } catch {
+        // ignore API failures and use local data only
+      }
+
+      // Show only routes managed from the Routes module storage.
+      setRoutes(mergeById(localRoutes));
+      setBuses(mergeById([...apiBuses, ...localBuses]));
     }
+
+    loadTransportData();
+
+    function onStorage(event: StorageEvent) {
+      if (event.key === ROUTES_KEY || event.key === BUSES_KEY) {
+        loadTransportData();
+      }
+    }
+
+    window.addEventListener('storage', onStorage);
+    const interval = setInterval(loadTransportData, 5000);
+
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      clearInterval(interval);
+    };
   }, []);
 
   const gradeOptions = useMemo(() => Array.from(new Set(students.map((s) => s.grade))).sort(), [students]);

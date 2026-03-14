@@ -8,7 +8,8 @@ type Route = {
   id: string;
   routeName: string;
   places: string;
-  fare: number;
+  oneWayFare: number;
+  twoWayFare: number;
   status: 'Active' | 'Inactive';
   createdAt: string;
 };
@@ -28,6 +29,56 @@ type Bus = {
 
 const ROUTES_KEY = 'school_routes';
 const BUSES_KEY = 'school_buses';
+const ACTIVITY_KEY = 'system_recent_activity';
+
+function logActivity(title: string, description: string, type: 'route' | 'approval' | 'transport' = 'route') {
+  try {
+    const existing = JSON.parse(localStorage.getItem(ACTIVITY_KEY) || '[]') as Array<{
+      id: string;
+      title: string;
+      description: string;
+      type: 'route' | 'approval' | 'transport';
+      createdAt: string;
+    }>;
+
+    const next = [
+      {
+        id: `act_${Date.now()}`,
+        title,
+        description,
+        type,
+        createdAt: new Date().toISOString(),
+      },
+      ...existing,
+    ].slice(0, 60);
+
+    localStorage.setItem(ACTIVITY_KEY, JSON.stringify(next));
+  } catch {
+    // ignore
+  }
+}
+
+function normalizeRoutes(raw: unknown): Route[] {
+  if (!Array.isArray(raw)) return [];
+
+  return raw
+    .filter((entry): entry is Record<string, unknown> => typeof entry === 'object' && entry !== null)
+    .map((route) => {
+      const legacyFare = Number(route.fare) || 0;
+      const oneWayFare = Number(route.oneWayFare);
+      const twoWayFare = Number(route.twoWayFare);
+
+      return {
+        id: String(route.id || ''),
+        routeName: String(route.routeName || ''),
+        places: String(route.places || ''),
+        oneWayFare: Number.isFinite(oneWayFare) ? oneWayFare : legacyFare,
+        twoWayFare: Number.isFinite(twoWayFare) ? twoWayFare : legacyFare * 2,
+        status: route.status === 'Inactive' ? 'Inactive' : 'Active',
+        createdAt: String(route.createdAt || new Date().toISOString()),
+      };
+    });
+}
 
 function nextRouteId(routes: Route[]) {
   const highest = routes.reduce((max, r) => {
@@ -40,7 +91,8 @@ function nextRouteId(routes: Route[]) {
 const emptyForm = {
   routeName: '',
   places: '',
-  fare: '',
+  oneWayFare: '',
+  twoWayFare: '',
   status: 'Active' as 'Active' | 'Inactive',
 };
 
@@ -73,7 +125,9 @@ export default function RoutesPage() {
 
     try {
       const savedRoutes = localStorage.getItem(ROUTES_KEY);
-      setRoutes(savedRoutes ? (JSON.parse(savedRoutes) as Route[]) : []);
+      const normalized = normalizeRoutes(savedRoutes ? JSON.parse(savedRoutes) : []);
+      setRoutes(normalized);
+      localStorage.setItem(ROUTES_KEY, JSON.stringify(normalized));
     } catch {
       setRoutes([]);
     }
@@ -109,7 +163,8 @@ export default function RoutesPage() {
         term === '' ||
         route.routeName.toLowerCase().includes(term) ||
         route.places.toLowerCase().includes(term) ||
-        String(route.fare).includes(term);
+        String(route.oneWayFare).includes(term) ||
+        String(route.twoWayFare).includes(term);
       const matchesStatus = statusFilter === 'All' || route.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
@@ -134,7 +189,13 @@ export default function RoutesPage() {
 
   const openEdit = (route: Route) => {
     setEditingRouteId(route.id);
-    setForm({ routeName: route.routeName, places: route.places, fare: String(route.fare), status: route.status });
+    setForm({
+      routeName: route.routeName,
+      places: route.places,
+      oneWayFare: String(route.oneWayFare),
+      twoWayFare: String(route.twoWayFare),
+      status: route.status,
+    });
     setIsEditorOpen(true);
   };
 
@@ -147,26 +208,38 @@ export default function RoutesPage() {
   const saveRoute = () => {
     if (!canManage) return;
     if (!form.routeName.trim()) { alert('Route name is required.'); return; }
-    const fareValue = Number(form.fare);
-    if (Number.isNaN(fareValue) || fareValue < 0) { alert('Please enter a valid fare amount.'); return; }
+    const oneWayFareValue = Number(form.oneWayFare);
+    const twoWayFareValue = Number(form.twoWayFare);
+    if (Number.isNaN(oneWayFareValue) || oneWayFareValue < 0) { alert('Please enter a valid one-way fare amount.'); return; }
+    if (Number.isNaN(twoWayFareValue) || twoWayFareValue < 0) { alert('Please enter a valid two-way fare amount.'); return; }
 
     let updated: Route[];
     if (editingRouteId) {
       updated = routes.map((r) =>
         r.id === editingRouteId
-          ? { ...r, routeName: form.routeName.trim(), places: form.places.trim(), fare: fareValue, status: form.status }
+          ? {
+              ...r,
+              routeName: form.routeName.trim(),
+              places: form.places.trim(),
+              oneWayFare: oneWayFareValue,
+              twoWayFare: twoWayFareValue,
+              status: form.status,
+            }
           : r
       );
+      logActivity('Route updated', `${form.routeName.trim()} pricing/details were updated.`);
     } else {
       const newRoute: Route = {
         id: nextRouteId(routes),
         routeName: form.routeName.trim(),
         places: form.places.trim(),
-        fare: fareValue,
+        oneWayFare: oneWayFareValue,
+        twoWayFare: twoWayFareValue,
         status: form.status,
         createdAt: new Date().toISOString(),
       };
       updated = [...routes, newRoute];
+      logActivity('Route created', `${newRoute.routeName} was created.`);
     }
 
     setRoutes(updated);
@@ -177,9 +250,11 @@ export default function RoutesPage() {
   const deleteRoute = (routeId: string) => {
     if (!canManage) return;
     if (!confirm('Delete this route? Buses using it will lose the route link.')) return;
+    const routeName = routes.find((route) => route.id === routeId)?.routeName || routeId;
     const updated = routes.filter((r) => r.id !== routeId);
     setRoutes(updated);
     localStorage.setItem(ROUTES_KEY, JSON.stringify(updated));
+    logActivity('Route deleted', `${routeName} was deleted.`);
   };
 
   return (
@@ -277,7 +352,8 @@ export default function RoutesPage() {
               <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-700">
                 <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-200 uppercase text-xs tracking-wide">Route Name</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-200 uppercase text-xs tracking-wide">Places / Stops</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-200 uppercase text-xs tracking-wide">Fare (KES)</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-200 uppercase text-xs tracking-wide">One Way (KES)</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-200 uppercase text-xs tracking-wide">Two Way (KES)</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-200 uppercase text-xs tracking-wide">Buses</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-200 uppercase text-xs tracking-wide">Status</th>
                 {canManage && (
@@ -288,7 +364,7 @@ export default function RoutesPage() {
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700/50">
               {filteredRoutes.length === 0 ? (
                 <tr>
-                  <td colSpan={canManage ? 6 : 5} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                  <td colSpan={canManage ? 7 : 6} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                     {routes.length === 0 ? 'No routes created yet.' : 'No routes match your search.'}
                   </td>
                 </tr>
@@ -304,9 +380,8 @@ export default function RoutesPage() {
                       <td className="px-4 py-3 text-gray-700 dark:text-gray-300 max-w-xs">
                         <span className="line-clamp-2">{route.places || '-'}</span>
                       </td>
-                      <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
-                        {route.fare > 0 ? route.fare.toLocaleString() : '-'}
-                      </td>
+                      <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{route.oneWayFare > 0 ? route.oneWayFare.toLocaleString() : '-'}</td>
+                      <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{route.twoWayFare > 0 ? route.twoWayFare.toLocaleString() : '-'}</td>
                       <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
                         {routeBuses.length > 0 ? (
                           <div className="flex flex-wrap gap-1">
@@ -397,14 +472,26 @@ export default function RoutesPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Fare (KES)</label>
+                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">One Way Fare (KES)</label>
                   <input
                     type="number"
                     min="0"
                     step="50"
-                    value={form.fare}
-                    onChange={(e) => setForm((p) => ({ ...p, fare: e.target.value }))}
+                    value={form.oneWayFare}
+                    onChange={(e) => setForm((p) => ({ ...p, oneWayFare: e.target.value }))}
                     placeholder="e.g. 3500"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:border-teal-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Two Way Fare (KES)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="50"
+                    value={form.twoWayFare}
+                    onChange={(e) => setForm((p) => ({ ...p, twoWayFare: e.target.value }))}
+                    placeholder="e.g. 7000"
                     className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:border-teal-500"
                   />
                 </div>

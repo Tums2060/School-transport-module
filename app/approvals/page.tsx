@@ -49,6 +49,34 @@ const APPROVALS_KEY = 'student_transport_approvals';
 const BUSES_KEY = 'school_buses';
 const ROUTES_KEY = 'school_routes';
 const TRANSPORT_KEY = 'student_transport_assignments';
+const ACTIVITY_KEY = 'system_recent_activity';
+
+function logActivity(title: string, description: string, type: 'approval' | 'route' | 'transport' = 'approval') {
+  try {
+    const existing = JSON.parse(localStorage.getItem(ACTIVITY_KEY) || '[]') as Array<{
+      id: string;
+      title: string;
+      description: string;
+      type: 'approval' | 'route' | 'transport';
+      createdAt: string;
+    }>;
+
+    const next = [
+      {
+        id: `act_${Date.now()}`,
+        title,
+        description,
+        type,
+        createdAt: new Date().toISOString(),
+      },
+      ...existing,
+    ].slice(0, 60);
+
+    localStorage.setItem(ACTIVITY_KEY, JSON.stringify(next));
+  } catch {
+    // ignore
+  }
+}
 
 function parseHour(time: string): number {
   return parseInt(time.split(':')[0], 10);
@@ -248,6 +276,12 @@ export default function ApprovalsPage() {
         localStorage.setItem(BUSES_KEY, JSON.stringify(updated));
         return updated;
       });
+
+      logActivity(
+        'Student approved',
+        `${item.fullName} (${item.admissionNumber}) approved for ${item.busId || 'no bus'}${item.routeId ? ` on route ${item.routeId}` : ''}.`,
+        'approval'
+      );
     } finally {
       setSavingId(null);
     }
