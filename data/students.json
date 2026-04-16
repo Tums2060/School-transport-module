@@ -26,8 +26,8 @@
     "parentName": "Joseph Kimani",
     "parentContact": "+254722001002",
     "address": "Roysambu",
-    "busAssigned": "bus_001",
-    "routeAssigned": "route_001",
+    "busAssigned": "BS003",
+    "routeAssigned": "RT003",
     "enrollmentDate": "2025-01-10",
     "isActive": true
   },
@@ -42,8 +42,8 @@
     "parentName": "Lucy Muthoni",
     "parentContact": "+254722001003",
     "address": "Zimmerman",
-    "busAssigned": "bus_002",
-    "routeAssigned": "route_002",
+    "busAssigned": "BS004",
+    "routeAssigned": "RT001",
     "enrollmentDate": "2025-01-10",
     "isActive": true
   },

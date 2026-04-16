@@ -343,6 +343,9 @@ export default function ApprovalsPage() {
                   <tr>
                     <th className="px-3 py-2 text-left">Admission</th>
                     <th className="px-3 py-2 text-left">Student</th>
+                    <th className="px-3 py-2 text-left">Grade</th>
+                    <th className="px-3 py-2 text-left">Parent</th>
+                    <th className="px-3 py-2 text-left">Contact</th>
                     <th className="px-3 py-2 text-left">Route</th>
                     <th className="px-3 py-2 text-left">Trip Type</th>
                     <th className="px-3 py-2 text-left">Direction</th>
@@ -359,6 +362,9 @@ export default function ApprovalsPage() {
                       <tr key={item.studentId}>
                         <td className="px-3 py-2 font-medium text-teal-700">{item.admissionNumber}</td>
                         <td className="px-3 py-2">{item.fullName}</td>
+                        <td className="px-3 py-2">{item.grade || '-'}</td>
+                        <td className="px-3 py-2">{item.parentName || '-'}</td>
+                        <td className="px-3 py-2">{item.parentContact || '-'}</td>
                         <td className="px-3 py-2">
                           <select
                             value={item.routeId}

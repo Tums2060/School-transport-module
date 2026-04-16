@@ -162,7 +162,8 @@ export default function StudentsPage() {
       {/* Secondary module nav */}
       <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700/50 px-4 py-3 flex items-center space-x-6 text-teal-700">
         <Link href="/" className="hover:underline text-gray-500 dark:text-gray-400">Home</Link>
-        <span className="font-bold border-b-2 border-teal-700 pb-1 cursor-default">Students</span>
+        <span className="font-bold border-b-2 border-teal-700 pb-1 cursor-default">All Students</span>
+        <Link href="/students/approved" className="hover:underline">Students</Link>
         <Link href="/buses" className="hover:underline">Transport Module</Link>
         <Link href="/routes" className="hover:underline">Routes</Link>
       </div>
@@ -278,7 +279,7 @@ export default function StudentsPage() {
           <div className="bg-white dark:bg-transparent shadow-sm border border-gray-200 dark:border-gray-700/40">
             <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-transparent flex justify-between items-center">
               <div className="flex items-center gap-3">
-                <span className="font-semibold text-gray-700 dark:text-gray-200">Students List</span>
+                <span className="font-semibold text-gray-700 dark:text-gray-200">All Students</span>
                 <div ref={searchContainerRef}>
                   {showSearchBar ? (
                     <input

@@ -167,6 +167,8 @@ export default function Home() {
 
   const canAddBusFromHome = userRole === 'Admin' || userRole === 'superior_Admin';
   const canSeeApprovals = userRole === 'superior_Admin';
+  const canManageImports = userRole === 'Admin' || userRole === 'superior_Admin';
+  const canSeeApprovedStudents = userRole === 'Admin' || userRole === 'superior_Admin';
 
   const getActivityIcon = (type: ActivityItem['type']) => {
     if (type === 'approval') return 'bg-green-100 text-green-600';
@@ -192,7 +194,8 @@ export default function Home() {
       {/* Secondary module nav */}
       <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700/50 px-4 py-3 flex items-center space-x-6 text-teal-700">
         <span className="font-bold border-b-2 border-teal-700 pb-1 cursor-default">Home</span>
-        <Link href="/students" className="hover:underline">Students</Link>
+        <Link href="/students" className="hover:underline">All Students</Link>
+        <Link href="/students/approved" className="hover:underline">Students</Link>
         <Link href="/buses" className="hover:underline">Transport Module</Link>
         <Link href="/routes" className="hover:underline">Routes</Link>
       </div>
@@ -315,10 +318,27 @@ export default function Home() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                     </svg>
                   </div>
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">Students</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">View all</p>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">All Students</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">View all records</p>
                 </div>
               </Link>
+
+              {canSeeApprovedStudents && (
+                <Link
+                  href="/students/approved"
+                  className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-sm p-4 hover:border-[#0078d4] hover:shadow-md transition-all group"
+                >
+                  <div className="flex flex-col items-center text-center">
+                    <div className="w-12 h-12 bg-[#0078d4]/10 dark:bg-[#0078d4]/20 rounded-full flex items-center justify-center mb-3 group-hover:bg-[#0078d4] transition-colors">
+                      <svg className="w-6 h-6 text-[#0078d4] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">Approved Students</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Bus and route details</p>
+                  </div>
+                </Link>
+              )}
 
               <Link
                 href="/buses"
@@ -363,6 +383,40 @@ export default function Home() {
                     </div>
                     <p className="text-sm font-medium text-gray-900 dark:text-white">Approvals</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Pending actions</p>
+                  </div>
+                </Link>
+              )}
+
+              {canManageImports && (
+                <Link
+                  href="/imports/upload"
+                  className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-sm p-4 hover:border-[#0078d4] hover:shadow-md transition-all group"
+                >
+                  <div className="flex flex-col items-center text-center">
+                    <div className="w-12 h-12 bg-[#0078d4]/10 dark:bg-[#0078d4]/20 rounded-full flex items-center justify-center mb-3 group-hover:bg-[#0078d4] transition-colors">
+                      <svg className="w-6 h-6 text-[#0078d4] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M8 12l4-4m0 0l4 4m-4-4v12" />
+                      </svg>
+                    </div>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">Bulk Upload</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Excel / Word import</p>
+                  </div>
+                </Link>
+              )}
+
+              {canManageImports && (
+                <Link
+                  href="/errors"
+                  className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-sm p-4 hover:border-[#0078d4] hover:shadow-md transition-all group"
+                >
+                  <div className="flex flex-col items-center text-center">
+                    <div className="w-12 h-12 bg-[#0078d4]/10 dark:bg-[#0078d4]/20 rounded-full flex items-center justify-center mb-3 group-hover:bg-[#0078d4] transition-colors">
+                      <svg className="w-6 h-6 text-[#0078d4] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" />
+                      </svg>
+                    </div>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">Import Errors</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Review and export PDF</p>
                   </div>
                 </Link>
               )}
