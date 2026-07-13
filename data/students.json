@@ -138,8 +138,8 @@
     "parentName": "Margaret Njeri",
     "parentContact": "+254722001009",
     "address": "Mirema",
-    "busAssigned": "bus_002",
-    "routeAssigned": "route_002",
+    "busAssigned": "BS004",
+    "routeAssigned": "RT001",
     "enrollmentDate": "2024-01-15",
     "isActive": true
   },
