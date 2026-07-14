@@ -70,85 +70,82 @@ export default function BusTripStudentsPage() {
   const busId = params?.busId || '';
   const tripNumber = Number(params?.tripNumber || '0');
 
-  const [buses, setBuses] = useState<Bus[]>([]);
-  const [studentProfiles, setStudentProfiles] = useState<StudentProfile[]>([]);
-  const [apiBuses, setApiBuses] = useState<ApiBus[]>([]);
+  const [bus, setBus] = useState<any | null>(null);
+  const [students, setStudents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedStudent, setSelectedStudent] = useState<any | null>(null);
+  const [absenteeismDetails, setAbsenteeismDetails] = useState<any | null>(null);
 
-  useEffect(() => {
+  const handleStudentClick = async (student: any) => {
+    setSelectedStudent(student);
+    setAbsenteeismDetails(null);
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      setBuses(saved ? (JSON.parse(saved) as Bus[]) : []);
-    } catch {
-      setBuses([]);
+      const res = await fetch('/api/attendance/absenteeism-rates');
+      const json = await res.json();
+      if (json.success) {
+        const rateRecord = json.data.find((item: any) => item.studentId === student.admissionNumber);
+        if (rateRecord) {
+          setAbsenteeismDetails(rateRecord);
+        } else {
+          setAbsenteeismDetails({
+            absenteeismRate: 0,
+            expectedTrips: 0,
+            missedTrips: 0,
+            isFlagged: false,
+            threshold: 50
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching student absenteeism rate:', error);
     }
-  }, []);
+  };
 
   useEffect(() => {
-    async function loadProfiles() {
+    async function loadData() {
+      if (!busId) return;
+      setLoading(true);
       try {
-        const [studentsRes, busesRes] = await Promise.all([
-          fetch('/api/students'),
-          fetch('/api/buses'),
+        const [busRes, studentsRes] = await Promise.all([
+          fetch(`/api/buses/${busId}`),
+          fetch(`/api/students?busId=${busId}&tripNumber=${tripNumber}`)
         ]);
+        const busJson = await busRes.json();
+        const studentsJson = await studentsRes.json();
 
-        const studentsData = await studentsRes.json();
-        const busesData = await busesRes.json();
-
-        if (studentsData.success) {
-          setStudentProfiles(studentsData.data as StudentProfile[]);
+        if (busJson.success) {
+          setBus(busJson.data);
         }
-
-        if (busesData.success) {
-          setApiBuses(busesData.data as ApiBus[]);
+        if (studentsJson.success) {
+          setStudents(studentsJson.data);
         }
-      } catch {
-        setStudentProfiles([]);
-        setApiBuses([]);
+      } catch (error) {
+        console.error('Error loading bus trip roster:', error);
+      } finally {
+        setLoading(false);
       }
     }
+    loadData();
+  }, [busId, tripNumber]);
 
-    loadProfiles();
-  }, []);
-
-  const bus = useMemo(() => buses.find((b) => b.id === busId), [buses, busId]);
-  const trip = useMemo(() => bus?.trips.find((t) => t.tripNumber === tripNumber), [bus, tripNumber]);
-  const profileByAdmission = useMemo(() => {
-    const map = new Map<string, StudentProfile>();
-    studentProfiles.forEach((profile) => {
-      map.set(profile.admissionNumber, profile);
-    });
-    return map;
-  }, [studentProfiles]);
-
-  const busNumberById = useMemo(() => {
-    const map = new Map<string, string>();
-    apiBuses.forEach((b) => {
-      map.set(b.id, b.busNumber);
-    });
-    return map;
-  }, [apiBuses]);
+  const trip = useMemo(() => bus?.trips.find((t: any) => t.tripNumber === tripNumber), [bus, tripNumber]);
 
   const tripRows = useMemo(() => {
-    if (!trip) return [];
-
-    return trip.students.map((student) => {
-      const profile = profileByAdmission.get(student.admissionNumber);
-      return {
-        admissionNumber: student.admissionNumber,
-        fullName: profile?.fullName || student.name,
-        grade: profile?.grade || '-',
-        stream: profile?.stream || '-',
-        gender: profile?.gender || '-',
-        parentName: profile?.parentName || '-',
-        parentContact: profile?.parentContact || '-',
-        assignedBus: profile?.busAssigned ? busNumberById.get(profile.busAssigned) || profile.busAssigned : 'Unassigned',
-        status: profile?.isActive ?? true,
-      };
-    });
-  }, [trip, profileByAdmission, busNumberById]);
+    return students.map((student) => ({
+      admissionNumber: student.admissionNumber,
+      fullName: student.fullName,
+      grade: student.grade || '-',
+      stream: student.stream || '-',
+      gender: student.gender || '-',
+      parentName: student.parentName || '-',
+      parentContact: student.parentContact || '-',
+      assignedBus: student.busAssigned || 'Unassigned',
+      status: student.isActive ?? true,
+    }));
+  }, [students]);
 
   const handlePrint = async () => {
-    if (!bus || !trip || trip.students.length === 0) return;
+    if (!bus || !trip || students.length === 0) return;
 
     const { jsPDF } = await import('jspdf');
     const autoTable = (await import('jspdf-autotable')).default;
@@ -162,14 +159,14 @@ export default function BusTripStudentsPage() {
 
     document.setFontSize(10);
     document.setTextColor(55, 65, 81);
-    document.text(`Bus No: ${bus.id}`, 14, 32);
+    document.text(`Bus Plate: ${bus.id}`, 14, 32);
     document.text(`Trip Time: ${formatTimeLabel(trip.time)}`, 14, 38);
-    document.text(`Route: ${routeSummary(trip.routeDetails) || 'Not specified'}`, 14, 44);
+    document.text(`Route: ${trip.pickupPoints || 'Not specified'}`, 14, 44);
 
     autoTable(document, {
       startY: 50,
       head: [['Admission Number', 'Student Name']],
-      body: trip.students.map((student) => [student.admissionNumber, student.name]),
+      body: students.map((s) => [s.admissionNumber, s.fullName]),
     });
 
     document.save(`${bus.id}-trip${trip.tripNumber}-students.pdf`);
@@ -179,11 +176,12 @@ export default function BusTripStudentsPage() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 font-sans text-sm text-gray-800 dark:text-gray-100">
       <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700/50 px-4 py-3 flex items-center space-x-6 text-teal-700">
         <Link href="/" className="hover:underline text-gray-500 dark:text-gray-400">Home</Link>
-        <Link href="/students" className="hover:underline">All Students</Link>
-        <Link href="/students/approved" className="hover:underline">Students</Link>
-        <Link href="/buses" className="hover:underline">Bus</Link>
-        <Link href="/zones" className="hover:underline">Zones</Link>
+        <Link href="/students" className="hover:underline text-gray-500 dark:text-gray-400">All Students</Link>
+        <Link href="/students/approved" className="hover:underline text-gray-500 dark:text-gray-400">Students</Link>
+        <Link href="/buses" className="hover:underline text-gray-500 dark:text-gray-400">Bus</Link>
+        <Link href="/zones" className="hover:underline text-gray-500 dark:text-gray-400">Zones</Link>
         <span className="font-bold border-b-2 border-teal-700 pb-1 cursor-default">Trip Students</span>
+        <Link href="/driver/login" className="hover:underline text-gray-500 dark:text-gray-400">Driver Portal</Link>
       </div>
 
       <main className="p-6">
@@ -201,7 +199,7 @@ export default function BusTripStudentsPage() {
               </div>
               <button
                 onClick={handlePrint}
-                disabled={trip.students.length === 0}
+                disabled={students.length === 0}
                 className="px-3 py-1.5 rounded bg-teal-700 hover:bg-teal-800 text-white disabled:bg-gray-400 flex items-center gap-2"
               >
                 <Download size={14} /> Print Details
@@ -209,7 +207,7 @@ export default function BusTripStudentsPage() {
             </div>
 
             <div className="p-4 text-sm text-gray-600 border-b border-gray-100">
-              <span className="font-medium text-gray-700">Pickup points:</span> {trip.routeDetails.pickupPoints || 'Not set'}
+              <span className="font-medium text-gray-700">Pickup points:</span> {trip.pickupPoints || 'Not set'}
             </div>
 
             {tripRows.length > 0 ? (
@@ -231,7 +229,12 @@ export default function BusTripStudentsPage() {
                   <tbody>
                     {tripRows.map((student, index) => (
                       <tr key={`${student.admissionNumber}-${index}`} className={`border-b border-gray-100 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
-                        <td className="py-2 px-4 text-gray-900">{student.admissionNumber}</td>
+                        <td 
+                          onClick={() => handleStudentClick(student)}
+                          className="py-2 px-4 text-teal-700 font-semibold cursor-pointer hover:underline"
+                        >
+                          {student.admissionNumber}
+                        </td>
                         <td className="py-2 px-4 text-gray-900">{student.fullName}</td>
                         <td className="py-2 px-4 text-gray-700">{student.grade}</td>
                         <td className="py-2 px-4 text-gray-700">{student.stream}</td>
@@ -252,6 +255,111 @@ export default function BusTripStudentsPage() {
             ) : (
               <div className="p-6 text-gray-400">No students in this trip yet.</div>
             )}
+          </div>
+        )}
+
+        {selectedStudent && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
+            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 w-full max-w-lg shadow-xl rounded-sm">
+              <div className="bg-teal-700 text-white px-6 py-4 flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-bold">Student Profile Details</h2>
+                  <p className="text-xs text-teal-100 font-mono">Admission: {selectedStudent.admissionNumber}</p>
+                </div>
+                <button 
+                  onClick={() => setSelectedStudent(null)}
+                  className="text-white hover:text-gray-200 text-xl font-bold"
+                >
+                  &times;
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                {/* Profile Grid */}
+                <div className="grid grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <span className="block text-gray-400 font-medium uppercase tracking-wider text-[10px]">Full Name</span>
+                    <span className="font-semibold text-gray-900 dark:text-white text-sm">{selectedStudent.fullName}</span>
+                  </div>
+                  <div>
+                    <span className="block text-gray-400 font-medium uppercase tracking-wider text-[10px]">Grade & Stream</span>
+                    <span className="font-semibold text-gray-900 dark:text-white text-sm">{selectedStudent.grade} - {selectedStudent.stream}</span>
+                  </div>
+                  <div>
+                    <span className="block text-gray-400 font-medium uppercase tracking-wider text-[10px]">Parent Name</span>
+                    <span className="text-gray-800 dark:text-gray-200">{selectedStudent.parentName}</span>
+                  </div>
+                  <div>
+                    <span className="block text-gray-400 font-medium uppercase tracking-wider text-[10px]">Parent Contact</span>
+                    <span className="text-gray-800 dark:text-gray-200">{selectedStudent.parentContact}</span>
+                  </div>
+                  <div>
+                    <span className="block text-gray-400 font-medium uppercase tracking-wider text-[10px]">Assigned Bus</span>
+                    <span className="text-gray-800 dark:text-gray-200">{selectedStudent.assignedBus}</span>
+                  </div>
+                  <div>
+                    <span className="block text-gray-400 font-medium uppercase tracking-wider text-[10px]">Status</span>
+                    <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-semibold ${selectedStudent.status ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                      {selectedStudent.status ? 'Active Student' : 'Inactive'}
+                    </span>
+                  </div>
+                </div>
+
+                <hr className="border-gray-100 dark:border-gray-700" />
+
+                {/* Absenteeism & Attendance Section */}
+                <div>
+                  <h3 className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-2">Academic Term Attendance (Live Computed)</h3>
+                  {absenteeismDetails ? (
+                    <div className="bg-gray-50 dark:bg-gray-900/50 p-4 border border-gray-200 dark:border-gray-800 space-y-3">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-gray-600 dark:text-gray-400">Absenteeism Rate:</span>
+                        <span className={`font-bold text-sm ${absenteeismDetails.isFlagged ? 'text-red-600 dark:text-red-400' : 'text-teal-700 dark:text-teal-400'}`}>
+                          {absenteeismDetails.absenteeismRate}%
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
+                        <div 
+                          className={`h-full ${absenteeismDetails.isFlagged ? 'bg-red-600' : 'bg-teal-600'}`}
+                          style={{ width: `${Math.min(absenteeismDetails.absenteeismRate, 100)}%` }}
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-500">
+                        <div>
+                          <span>Expected Trips: <strong>{absenteeismDetails.expectedTrips}</strong></span>
+                        </div>
+                        <div>
+                          <span>Missed (Absent): <strong>{absenteeismDetails.missedTrips}</strong></span>
+                        </div>
+                      </div>
+                      
+                      {absenteeismDetails.isFlagged ? (
+                        <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 p-2 text-xs text-red-700 dark:text-red-400 flex items-center gap-2">
+                          <span className="font-bold">⚠️ Flagged:</span> Chronic absenteeism detected (exceeded threshold of {absenteeismDetails.threshold}%).
+                        </div>
+                      ) : (
+                        <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 p-2 text-xs text-green-700 dark:text-green-400 flex items-center gap-2">
+                          <span className="font-bold">✓ Standard:</span> Attendance meets standard thresholds.
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center p-6 text-xs text-gray-500">
+                      <span className="animate-spin mr-2">⚙</span> Computing term attendance analytics...
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-gray-50 dark:bg-gray-800/80 px-6 py-3 flex justify-end border-t border-gray-100 dark:border-gray-700">
+                <button
+                  onClick={() => setSelectedStudent(null)}
+                  className="px-4 py-1.5 rounded border border-gray-300 dark:border-gray-600 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </main>

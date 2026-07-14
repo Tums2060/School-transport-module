@@ -10,6 +10,7 @@ import Place from '../models/Place.js';
 import Bus from '../models/Bus.js';
 import Student from '../models/Student.js';
 import TransportApproval from '../models/TransportApproval.js';
+import Term from '../models/Term.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -190,6 +191,17 @@ export async function seedDatabase() {
     }
     console.log(`Seeded ${studentCount} Students.`);
     console.log(`Seeded ${approvalCount} approved transport records.`);
+    
+    // 6. Seed a default active Term
+    await Term.deleteMany({});
+    const defaultTerm = await Term.create({
+      name: 'Term 1 2026',
+      startDate: new Date('2026-01-05'),
+      endDate: new Date('2026-04-10'),
+      isActive: true
+    });
+    console.log(`Seeded default active Term: "${defaultTerm.name}"`);
+
     console.log('Database seeding finished successfully!');
   } catch (err) {
     console.error('Seeding failed:', err);

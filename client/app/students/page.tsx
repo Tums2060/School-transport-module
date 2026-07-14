@@ -163,9 +163,10 @@ export default function StudentsPage() {
       <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700/50 px-4 py-3 flex items-center space-x-6 text-teal-700">
         <Link href="/" className="hover:underline text-gray-500 dark:text-gray-400">Home</Link>
         <span className="font-bold border-b-2 border-teal-700 pb-1 cursor-default">All Students</span>
-        <Link href="/students/approved" className="hover:underline">Students</Link>
-        <Link href="/buses" className="hover:underline">Bus</Link>
-        <Link href="/zones" className="hover:underline">Zones</Link>
+        <Link href="/students/approved" className="hover:underline text-gray-500 dark:text-gray-400">Students</Link>
+        <Link href="/buses" className="hover:underline text-gray-500 dark:text-gray-400">Bus</Link>
+        <Link href="/zones" className="hover:underline text-gray-500 dark:text-gray-400">Zones</Link>
+        <Link href="/driver/login" className="hover:underline text-gray-500 dark:text-gray-400">Driver Portal</Link>
       </div>
       <div className="flex">
         {showFilters && (

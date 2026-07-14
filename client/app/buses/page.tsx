@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Search, Plus, Download, ArrowDown, Pencil, Trash2, Check, X, Filter } from 'lucide-react';
+import { Search, Plus, Download, ArrowDown, Pencil, Trash2, Check, X, Filter, Map } from 'lucide-react';
 
 type Place = {
   id: string;
@@ -436,6 +436,7 @@ export default function BusesListPage() {
         <Link href="/students/approved" className="hover:underline text-gray-500 dark:text-gray-400">Students</Link>
         <span className="font-bold border-b-2 border-teal-700 pb-1 cursor-default">Bus</span>
         <Link href="/zones" className="hover:underline text-gray-500 dark:text-gray-400">Zones</Link>
+        <Link href="/driver/login" className="hover:underline text-gray-500 dark:text-gray-400">Driver Portal</Link>
       </div>
 
       <div className="p-6 m-4 bg-white dark:bg-transparent shadow-sm border border-gray-200 dark:border-gray-700/40">
@@ -539,8 +540,8 @@ export default function BusesListPage() {
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="text-gray-500 dark:text-gray-400 border-b-2 border-gray-200 dark:border-gray-700">
-                <th className="font-normal py-3 px-4 w-24">No.</th>
-                <th className="font-normal py-3 px-4">Bus Name</th>
+                <th className="font-normal py-3 px-4 w-28">Number Plate</th>
+                <th className="font-normal py-3 px-4">Description</th>
                 <th className="font-normal py-3 px-4">Trip Pickup Points</th>
                 <th className="font-normal py-3 px-4">Driver</th>
                 <th className="font-normal py-3 px-4">Trips / Time</th>
@@ -588,6 +589,9 @@ export default function BusesListPage() {
                   </td>
                   {canManage && (
                     <td className="py-3 px-4 text-right space-x-2">
+                      <Link href={`/tracking?bus=${bus.id}`} className="text-teal-700 hover:text-teal-950 inline-block mr-1" title="Track GPS">
+                        <Map size={14} className="inline" />
+                      </Link>
                       <button onClick={() => openEditModal(bus)} className="text-teal-700 hover:text-teal-900">
                         <Pencil size={14} className="inline" />
                       </button>

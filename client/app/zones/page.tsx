@@ -285,6 +285,7 @@ export default function ZonesPage() {
         <Link href="/students/approved" className="hover:underline text-gray-500 dark:text-gray-400">Students</Link>
         <Link href="/buses" className="hover:underline text-gray-500 dark:text-gray-400">Bus</Link>
         <span className="font-bold border-b-2 border-teal-700 pb-1 cursor-default">Zones</span>
+        <Link href="/driver/login" className="hover:underline text-gray-500 dark:text-gray-400">Driver Portal</Link>
       </div>
 
       <div className="p-6 m-4 bg-white dark:bg-transparent shadow-sm border border-gray-200 dark:border-gray-700/40">

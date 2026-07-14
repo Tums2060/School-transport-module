@@ -11,6 +11,7 @@ import Place from './models/Place.js';
 import Bus from './models/Bus.js';
 import Student from './models/Student.js';
 import TransportApproval from './models/TransportApproval.js';
+import Term from './models/Term.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,8 +28,9 @@ async function runMigration() {
   await Bus.deleteMany({});
   await Student.deleteMany({});
   await TransportApproval.deleteMany({});
+  await Term.deleteMany({});
 
-  console.log('Database cleared of existing User, Zone, Place, Bus, Student, and TransportApproval records.');
+  console.log('Database cleared of existing User, Zone, Place, Bus, Student, TransportApproval, and Term records.');
 
   // 1. Seed Catch-All Zone
   const catchAllZoneName = 'General Zone';
@@ -176,15 +178,22 @@ async function runMigration() {
     });
     migratedStudentsCount++;
 
-    // 6. If student is assigned to transport, create approved TransportApproval record
+    // 6. If student is assigned to transport, create approved/pending/rejected TransportApproval record
     if (rawStudent.busAssigned && rawStudent.routeAssigned) {
       const busDoc = busMap.get(rawStudent.busAssigned);
       const zoneDoc = zoneMap.get(rawStudent.routeAssigned) || zoneMap.get(rawStudent.routeAssigned.replace('RT', 'route_'));
       
       if (busDoc) {
-        // Resolve place: find first place in the student's assigned route or fallback to catch-all
         const places = routePlacesMap.get(rawStudent.routeAssigned) || routePlacesMap.get(rawStudent.routeAssigned.replace('RT', 'route_')) || [];
-        const placeDoc = places[0] || catchAllZone; // fallback if no places
+        const placeDoc = places[0] || catchAllZone;
+
+        // Distribute statuses: divisible by 5 = pending, divisible by 7 = rejected, else = approved
+        let status = 'approved';
+        if (migratedStudentsCount % 5 === 0) {
+          status = 'pending';
+        } else if (migratedStudentsCount % 7 === 0) {
+          status = 'rejected';
+        }
 
         await TransportApproval.create({
           studentId: studentDoc._id,
@@ -193,17 +202,27 @@ async function runMigration() {
           placeId: placeDoc._id,
           tripType: 'two_way',
           direction: 'both',
-          status: 'approved',
-          approvedBy: superAdminUser ? superAdminUser._id : null,
-          approvedAt: new Date()
+          status: status,
+          approvedBy: status === 'approved' && superAdminUser ? superAdminUser._id : null,
+          approvedAt: status === 'approved' ? new Date() : null
         });
         approvedApprovalsCount++;
       }
     }
   }
 
+  // 7. Seed default active Term
+  await Term.deleteMany({});
+  const defaultTerm = await Term.create({
+    name: 'Term 1 2026',
+    startDate: new Date('2026-01-05'),
+    endDate: new Date('2026-04-10'),
+    isActive: true
+  });
+  console.log(`Seeded default active Term: "${defaultTerm.name}"`);
+
   console.log(`Migrated ${migratedStudentsCount} students.`);
-  console.log(`Created ${approvedApprovalsCount} approved transport records.`);
+  console.log(`Created ${approvedApprovalsCount} transport records (mix of approved/pending/rejected).`);
   console.log('Migration finished successfully!');
   await mongoose.connection.close();
   process.exit(0);

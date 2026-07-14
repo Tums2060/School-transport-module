@@ -314,7 +314,7 @@ export default function Home() {
               </Link>
 
               <Link
-                href="/routes"
+                href="/zones"
                 className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-sm p-4 hover:border-[#0078d4] hover:shadow-md transition-all group"
               >
                 <div className="flex flex-col items-center text-center">
@@ -323,8 +323,8 @@ export default function Home() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
                     </svg>
                   </div>
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">Routes</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">View all</p>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">Zones</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Manage locations & fares</p>
                 </div>
               </Link>
 
@@ -344,6 +344,84 @@ export default function Home() {
                   </div>
                 </Link>
               )}
+
+              <Link
+                href="/sms"
+                className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-sm p-4 hover:border-[#0078d4] hover:shadow-md transition-all group"
+              >
+                <div className="flex flex-col items-center text-center">
+                  <div className="w-12 h-12 bg-[#0078d4]/10 dark:bg-[#0078d4]/20 rounded-full flex items-center justify-center mb-3 group-hover:bg-[#0078d4] transition-colors">
+                    <svg className="w-6 h-6 text-[#0078d4] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                  </div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">Bulk SMS</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Send notifications</p>
+                </div>
+              </Link>
+
+              <Link
+                href="/tracking"
+                className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-sm p-4 hover:border-[#0078d4] hover:shadow-md transition-all group"
+              >
+                <div className="flex flex-col items-center text-center">
+                  <div className="w-12 h-12 bg-[#0078d4]/10 dark:bg-[#0078d4]/20 rounded-full flex items-center justify-center mb-3 group-hover:bg-[#0078d4] transition-colors">
+                    <svg className="w-6 h-6 text-[#0078d4] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">Live Tracking</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Fleet GPS locations</p>
+                </div>
+              </Link>
+
+              <Link
+                href="/flagged"
+                className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-sm p-4 hover:border-[#0078d4] hover:shadow-md transition-all group"
+              >
+                <div className="flex flex-col items-center text-center">
+                  <div className="w-12 h-12 bg-[#0078d4]/10 dark:bg-[#0078d4]/20 rounded-full flex items-center justify-center mb-3 group-hover:bg-[#0078d4] transition-colors">
+                    <svg className="w-6 h-6 text-[#0078d4] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
+                    </svg>
+                  </div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">Flagged Students</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Absentee alerts</p>
+                </div>
+              </Link>
+
+              {userRole === 'superior_Admin' && (
+                <Link
+                  href="/terms"
+                  className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-sm p-4 hover:border-[#0078d4] hover:shadow-md transition-all group"
+                >
+                  <div className="flex flex-col items-center text-center">
+                    <div className="w-12 h-12 bg-[#0078d4]/10 dark:bg-[#0078d4]/20 rounded-full flex items-center justify-center mb-3 group-hover:bg-[#0078d4] transition-colors">
+                      <svg className="w-6 h-6 text-[#0078d4] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">Manage Terms</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Academic calendar bounds</p>
+                  </div>
+                </Link>
+              )}
+
+              <Link
+                href="/driver/login"
+                className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-sm p-4 hover:border-[#0078d4] hover:shadow-md transition-all group"
+              >
+                <div className="flex flex-col items-center text-center">
+                  <div className="w-12 h-12 bg-[#0078d4]/10 dark:bg-[#0078d4]/20 rounded-full flex items-center justify-center mb-3 group-hover:bg-[#0078d4] transition-colors">
+                    <svg className="w-6 h-6 text-[#0078d4] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  </div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">Driver Portal</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Driver Console Login</p>
+                </div>
+              </Link>
 
           </div>
         </div>
